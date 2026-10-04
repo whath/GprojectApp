@@ -9,6 +9,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        MonitorStorage.context = applicationContext
         enableEdgeToEdge()
         setContent {
             val model = viewModel { MarketViewModel() }

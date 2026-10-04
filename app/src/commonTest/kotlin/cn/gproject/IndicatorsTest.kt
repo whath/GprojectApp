@@ -3,6 +3,12 @@ package cn.gproject
 import kotlin.test.*
 
 class IndicatorsTest {
+    @Test fun ma125Requires125DailyObservations() {
+        val data=demoStock(Quote("demo","测试","688981")).candles.map { Bar(it.date,it.close,it.high,it.volume,it.source,it.open,it.low,it.volumeUnit) }
+        assertNull(Indicators.calculate(quote,data.takeLast(124),Rules(ma=125)))
+        val signal=assertNotNull(Indicators.calculate(quote,data.takeLast(125),Rules(ma=125)))
+        assertEquals(data.takeLast(125).map { it.close }.average(),signal.ma,1e-9)
+    }
     private val quote = Quote("CN.stock.000001", "测试", "000001")
 
     private fun bars() =
@@ -13,8 +19,16 @@ class IndicatorsTest {
                 it.toDouble() + 10.5,
                 100.0,
                 "fixture",
+                volumeUnit="share",
             )
         }
+
+    @Test
+    fun volumeRatiosRequireConsistentKnownUnitsAndSource() {
+        assertNull(Indicators.calculate(quote,bars().map { it.copy(source="") },Rules()))
+        assertNull(Indicators.calculate(quote,bars().map { it.copy(volumeUnit="unknown") },Rules()))
+        assertNull(Indicators.calculate(quote,bars().dropLast(1)+bars().last().copy(volumeUnit="lot_100_shares"),Rules()))
+    }
 
     @Test
     fun trendAndVolumeExcludeTodayFromBaseline() {

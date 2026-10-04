@@ -18,6 +18,7 @@ kotlin {
             implementation(compose.materialIconsExtended)
             implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose:2.9.0")
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+            implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.0")
             implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
             implementation("io.ktor:ktor-client-core:3.1.3")
         }
@@ -53,7 +54,7 @@ compose.desktop {
             packageName = "Gproject"
             packageVersion = "1.0.0"
             modules("java.net.http", "jdk.unsupported")
-            windows { perUserInstall = true; menuGroup = "Gproject"; shortcut = true; upgradeUuid = "34d609b0-a05f-4ba4-87af-ebd07b606399" }
+            windows { iconFile.set(project.file("src/desktopMain/resources/brand-icon.ico")); perUserInstall = true; menuGroup = "Gproject"; shortcut = true; upgradeUuid = "34d609b0-a05f-4ba4-87af-ebd07b606399" }
         }
     }
 }

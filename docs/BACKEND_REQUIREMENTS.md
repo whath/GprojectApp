@@ -1,5 +1,7 @@
 # GprojectApp 前端所需后台接口与业务逻辑
 
+**2026-10-15 对接更新：** 本文的“当前副本尚未实现”描述保留 10 月 4 日整理基线。现网后端 v0.4.2 的 9 类已调用路径均已存在，个股资金和关键词新闻已有实采数据；THS 成员和 THS 逐日板块资金维持 501，已实现接口尚未采集时为 503。目录/成员已携带 snapshot_id，目录 409 从头重读，请求统一节流及有限处理 429。最新实际数据覆盖、验证与剩余范围以 [联调记录](BACKEND_INTEGRATION_20261015.md) 及后端缺口报告为准，下文 JSON 仍为示例。
+
 整理日期：2026-10-04。前端：https://github.com/whath/GprojectApp 。后台：https://github.com/whath/GprojectBack 。
 
 依据当前 Android/Windows Kotlin Compose 前端及本机后台契约副本整理。本文不代表线上已经实现、部署或完成生产数据验收；所有 JSON 行情、金额与日期均为契约示例。

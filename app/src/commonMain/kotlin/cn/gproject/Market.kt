@@ -11,7 +11,11 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.*
+import kotlin.time.TimeSource
+import kotlin.time.Duration.Companion.milliseconds
 
 data class Quote(
     val id: String,
@@ -172,20 +176,44 @@ class MarketRepository(
             requestTimeoutMillis = 20000
             connectTimeoutMillis = 10000
         }
-    }
+    },
+    private val requestSpacingMillis: Long = 120,
 ) : AutoCloseable {
     var base = ""
     var token = ""
+    private val requestGate = Mutex()
+    private val requestClock = TimeSource.Monotonic.markNow()
+    private var nextRequestAt = requestClock.elapsedNow()
+
+    private suspend fun pace() = requestGate.withLock {
+        val wait = nextRequestAt - requestClock.elapsedNow()
+        if (wait.isPositive()) delay(wait)
+        nextRequestAt = requestClock.elapsedNow() + requestSpacingMillis.milliseconds
+    }
 
     suspend fun get(path: String, params: Map<String, String> = emptyMap()): JsonObject {
+        // Capture the session before a rate-limit wait; a reconnect cannot change this request's credentials.
+        val requestBase = base.trimEnd('/')
+        val requestToken = token
+        repeat(3) { attempt ->
+        pace()
         val response =
-            client.get(base.trimEnd('/') + path) {
-                header("Authorization", "Bearer $token")
+            client.get(requestBase + path) {
+                header("Authorization", "Bearer $requestToken")
                 params.forEach { (k, v) -> parameter(k, v) }
             }
         if (response.status.value == 401) throw ApiFailure(401,"令牌无效或已过期，请重新连接")
+        if (response.status.value == 429 && attempt < 2) {
+            val seconds = response.headers["Retry-After"]?.toLongOrNull()?.coerceIn(1, 30)
+            delay(seconds?.times(1000) ?: (500L shl attempt))
+            return@repeat
+        }
         if (response.status.value !in 200..299) throw ApiFailure(response.status.value,"服务请求失败（${response.status.value}），请稍后重试")
-        return Json.parseToJsonElement(response.bodyAsText()).jsonObject
+        val body = response.bodyAsText()
+        return try { Json.parseToJsonElement(body).jsonObject }
+        catch (_: IllegalArgumentException) { throw ApiFailure(502, "服务未返回有效 JSON，请检查 API 地址") }
+        }
+        throw ApiFailure(429, "请求过于频繁，请稍后重试")
     }
 
     override fun close() {

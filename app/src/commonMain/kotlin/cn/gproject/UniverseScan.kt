@@ -6,12 +6,28 @@ import kotlinx.datetime.LocalDate
 
 /** Exhaust the server catalog; reject broken or changing pagination instead of claiming completion. */
 internal suspend fun MarketRepository.catalog(kind: String = "stock"): List<JsonObject> {
+    for (attempt in 0..1) {
+        try { return catalogSnapshot(kind, attempt > 0) }
+        catch (e: ApiFailure) { if (e.status != 409 || attempt == 1) throw e }
+    }
+    error("目录快照已失效，请重新扫描")
+}
+
+private suspend fun MarketRepository.catalogSnapshot(kind: String, refresh: Boolean): List<JsonObject> {
     val result=mutableListOf<JsonObject>()
     val seen=mutableSetOf<String>()
     var expected: Int?=null
+    var snapshotId: String?=null
     do {
         currentCoroutineContext().ensureActive()
-        val page=get("/v1/instruments",mapOf("market" to "CN","kind" to kind,"limit" to "500","offset" to result.size.toString()))
+        val page=get("/v1/instruments",buildMap {
+            put("market","CN");put("kind",kind);put("limit","500");put("offset",result.size.toString())
+            snapshotId?.let { put("snapshot_id",it) }
+            if (result.isEmpty() && refresh) put("refresh","true")
+        })
+        val pageSnapshot=page.str("snapshot_id").takeIf { it.isNotBlank() }
+        if (result.isEmpty()) snapshotId=pageSnapshot
+        else require(pageSnapshot==snapshotId) { "目录快照发生变化，请重新扫描" }
         val rawTotal=requireNotNull(page.num("total")) { "目录未提供总数" }
         require(rawTotal>=0 && rawTotal<=Int.MAX_VALUE && rawTotal%1.0==0.0) { "目录总数无效" }
         val total=rawTotal.toInt()

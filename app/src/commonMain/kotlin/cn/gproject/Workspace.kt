@@ -51,9 +51,15 @@ internal suspend fun MarketRepository.membershipIndex(date: String): MembershipI
     for(batch in boards.chunked(4)) {
         val results=coroutineScope { batch.map { board -> async {
             try {
-                val symbols=linkedSetOf<String>();var offset=0;var complete=true
+                val symbols=linkedSetOf<String>();var offset=0;var complete=true;var snapshotId: String?=null
                 do {
-                    val response=get("/v1/cn/boards/${board.str("id")}/members",mapOf("observed_date" to date,"limit" to "500","offset" to offset.toString()))
+                    val response=get("/v1/cn/boards/${board.str("id")}/members",buildMap {
+                        put("observed_date",date);put("limit","500");put("offset",offset.toString())
+                        snapshotId?.let { put("snapshot_id",it) }
+                    })
+                    val pageSnapshot=response.str("snapshot_id").takeIf { it.isNotBlank() }
+                    if (offset==0) snapshotId=pageSnapshot
+                    else require(pageSnapshot==snapshotId) { "成分快照发生变化" }
                     require(response.str("trade_date")==date) { "成分日期不一致" }
                     val rows=response.rows()
                     val states=(response["task_status"] as? JsonArray).orEmpty().map { it.jsonObject.str("status") }

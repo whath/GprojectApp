@@ -16,6 +16,7 @@ class StockFundsRepositoryTest {
         val fundsStarted = CompletableDeferred<Unit>()
         val repository = MarketRepository(HttpClient(MockEngine { request ->
             assertEquals("Bearer test-only-token", request.headers[HttpHeaders.Authorization])
+            if(request.url.encodedPath.endsWith("/minutes") || request.url.encodedPath.endsWith("/metrics")) return@MockEngine respond("not collected", HttpStatusCode.ServiceUnavailable)
             assertEquals("2026-09-30", request.url.parameters["end"])
             assertEquals("2000", request.url.parameters["limit"])
             when (request.url.encodedPath) {

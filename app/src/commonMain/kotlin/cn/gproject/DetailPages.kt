@@ -206,8 +206,11 @@ internal fun StockDetailPage(stock: StockDetail, demo: Boolean, wide: Boolean, o
                         }
                     }
                     if (period == ChartPeriod.INTRADAY) {
-                        if (stock.minutes.isEmpty()) Empty("分时行情待接入", "当前服务仅提供日线，暂无分钟行情。可切换日K、周K、月K查看。")
-                        else IntradayChart(stock.minutes)
+                        if (stock.minutes.isEmpty()) Empty("暂无已采集分钟行情", stock.minuteFeed?.error ?: "可切换日K、周K、月K查看；分钟源仅支持近期日期。")
+                        else {
+                            IntradayChart(stock.minutes)
+                            stock.minuteFeed?.let { Caption("${it.date} · ${it.source} · 收盘后分钟记录，非实时行情") }
+                        }
                     } else if (stock.candles.isEmpty()) {
                         Empty(if (stock.loading) "正在加载 K 线" else "暂无可用 K 线", "需要完整的开盘、最高、最低、收盘价；缺失数据不补造。")
                     } else key(stock.quote.id, period) {
@@ -233,6 +236,19 @@ internal fun StockDetailPage(stock: StockDetail, demo: Boolean, wide: Boolean, o
                     }
                     Text(leader.reason, fontSize = 13.sp)
                     Caption("单条披露：不合并其他上榜原因或统计周期；净买额不代表该股全市场净流入。")
+                    stock.seats?.let { seats ->
+                        seats.error?.let { Caption("席位：$it") }
+                        if(seats.items.isNotEmpty()) {
+                            Text("买卖席位披露 · ${seats.date}", fontWeight=FontWeight.Medium, fontSize=14.sp)
+                            seats.items.forEach { row ->
+                                Column(Modifier.fillMaxWidth().padding(vertical=4.dp)) {
+                                    Text("${row.direction} · ${row.seat}",fontSize=12.sp)
+                                    Caption("净额 ${money(row.net)} · ${row.reason}")
+                                }
+                            }
+                            Caption("买卖方向与上榜原因分别保留，金额不合计。")
+                        }
+                    }
                     if (leader.date.isNotBlank() && latest != null && leader.date != latest.date) Caption("披露日期与当前 K 线日期不同，请分别核对。")
                 }
             } }
@@ -249,7 +265,23 @@ internal fun StockDetailPage(stock: StockDetail, demo: Boolean, wide: Boolean, o
                             repeat((if (wide) 6 else 2) - group.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
-                    Caption("价格及成交额币种：$currency。前次收盘为上一条已观测日线；换手率、总市值、市盈率接口待接入。")
+                    Caption("价格及成交额币种：$currency。前次收盘为上一条已观测日线。")
+                    stock.metrics?.let { metrics ->
+                        if(metrics.error != null) Caption("估值：${metrics.error}")
+                        else {
+                            val values=listOf("总市值" to quantity(metrics.totalCap), "流通市值" to quantity(metrics.floatCap),
+                                "PE(TTM)" to decimal(metrics.peTtm), "PE(静态)" to decimal(metrics.peStatic),
+                                "市净率" to decimal(metrics.pb), "换手率" to (metrics.turnover?.let { decimal(it)+"%" } ?: "—"))
+                            values.chunked(if(wide) 6 else 2).forEach { group ->
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                                    group.forEach { (label,value) -> Box(Modifier.weight(1f).padding(vertical=8.dp)) { Metric(label,value) } }
+                                }
+                            }
+                            Caption("估值截至 ${metrics.date} · CNY · ${metrics.source}")
+                            if(metrics.date != latest?.date) Caption("估值与当前 K 线日期不同，请分别核对。")
+                            if(metrics.turnoverDerived) Caption("换手率按同日成交股数 / 同日流通股本计算。")
+                        }
+                    }
                 }
             }
         }

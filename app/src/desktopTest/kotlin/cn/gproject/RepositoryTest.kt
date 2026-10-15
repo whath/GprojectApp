@@ -59,7 +59,7 @@ class RepositoryTest {
     @Test
     fun stockHistoryUsesBoundedDailyContractAndPreservesUnits() = runBlocking {
         val repository = MarketRepository(HttpClient(MockEngine { request ->
-            if (request.url.encodedPath.endsWith("/flows")) return@MockEngine respond("not available", HttpStatusCode.NotFound)
+            if (request.url.encodedPath.endsWith("/flows") || request.url.encodedPath.endsWith("/minutes") || request.url.encodedPath.endsWith("/metrics")) return@MockEngine respond("not available", HttpStatusCode.NotFound)
             assertEquals("/v1/bars/CN.stock.688981", request.url.encodedPath)
             assertEquals("2000", request.url.parameters["limit"])
             assertEquals("2026-09-30", request.url.parameters["end"])

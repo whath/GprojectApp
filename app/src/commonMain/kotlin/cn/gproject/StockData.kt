@@ -24,6 +24,9 @@ data class StockDetail(
     val leader: Leader? = null,
     val currency: String = "CNY",
     val funds: StockFundSeries? = null,
+    val minuteFeed: MinuteFeed? = null,
+    val metrics: StockMetrics? = null,
+    val seats: SeatFeed? = null,
 )
 
 internal fun StockDetail.snapshotQuote(): Quote {
@@ -57,6 +60,10 @@ internal fun aggregateCandles(bars: List<Candle>, period: ChartPeriod): List<Can
 internal suspend fun MarketRepository.stockDetail(quote: Quote, end: String, leader: Leader?): StockDetail = coroutineScope {
     // This optional series is independent of OHLCV: an unavailable endpoint must not erase the chart.
     val funds = async { stockFunds(quote.id, end) }
+    val cn = quote.id.startsWith("CN.stock.") && runCatching { LocalDate.parse(end) }.isSuccess
+    val minutes = async { if (cn) minuteFeed(quote.id, end) else null }
+    val metrics = async { if (cn) metricsFeed(quote.id, end) else null }
+    val seats = async { if (cn && leader != null && runCatching { LocalDate.parse(leader.date) }.isSuccess) seatFeed(quote.symbol, leader.date) else null }
     val response = get("/v1/bars/${quote.id}", buildMap {
         put("limit", "2000")
         if (runCatching { LocalDate.parse(end) }.isSuccess) put("end", end)
@@ -76,7 +83,8 @@ internal suspend fun MarketRepository.stockDetail(quote: Quote, end: String, lea
     }
     val candles = aggregateCandles(rows, ChartPeriod.DAY)
     val instrument = response["instrument"] as? kotlinx.serialization.json.JsonObject
-    StockDetail(quote, candles, loading = false, leader = leader, currency = instrument?.str("currency").orEmpty().ifBlank { if (quote.id.startsWith("US.")) "USD" else "CNY" }, funds = funds.await())
+    val minuteResult = minutes.await()
+    StockDetail(quote, candles, minutes = minuteResult?.points.orEmpty(), minuteFeed = minuteResult, metrics = metrics.await(), seats = seats.await(), loading = false, leader = leader, currency = instrument?.str("currency").orEmpty().ifBlank { if (quote.id.startsWith("US.")) "USD" else "CNY" }, funds = funds.await())
 }
 
 internal fun demoStock(quote: Quote, leader: Leader? = null): StockDetail {

@@ -11,6 +11,8 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.*
@@ -76,6 +78,10 @@ data class ScreenState(
     val boards: List<Board> = emptyList(),
     val leaders: List<Leader> = emptyList(),
     val us: List<Quote> = emptyList(),
+    val indices: List<Quote> = emptyList(),
+    val usSectors: List<Quote> = emptyList(),
+    val limitUp: LimitUpFeed? = null,
+    val agenda: AgendaFeed? = null,
     val signals: List<Signal> = emptyList(),
     val rules: Rules = Rules(),
     val error: String? = null,
@@ -336,9 +342,10 @@ class MarketViewModel(private val api: MarketRepository = MarketRepository(), in
         val generation=++requestGeneration
         state.update { it.copy(loading=true,error=null) }
         request=viewModelScope.launch {
+            val sections = Semaphore(4)
             suspend fun section(name: String,action: suspend ()->Unit) {
                 try {
-                    action()
+                    sections.withPermit { action() }
                     if(generation==requestGeneration) state.update { it.copy(sectionErrors=it.sectionErrors-name) }
                 } catch(e: CancellationException) { throw e }
                 catch(e: Exception) {
@@ -358,10 +365,24 @@ class MarketViewModel(private val api: MarketRepository = MarketRepository(), in
                         }
                     } }
                     launch { section("龙虎榜") {
-                        val response=api.get("/v1/cn/lhb",mapOf("limit" to "50"))
-                        val date=response.str("trade_date").also { kotlinx.datetime.LocalDate.parse(it) }
-                        val leaders=response.rows().map { Leader(it.str("name"),it.str("symbol"),it.num("net_amount"),it.str("reason"),date) }
-                        if(generation==requestGeneration) state.update { it.copy(leaders=leaders,leaderDate=date) }
+                        val feed=api.disclosures()
+                        if(generation==requestGeneration) state.update { it.copy(leaders=feed.leaders,leaderDate=feed.date) }
+                    } }
+                    launch { section("指数") {
+                        val quotes=api.referenceIndices()
+                        if(generation==requestGeneration) state.update { it.copy(indices=quotes) }
+                    } }
+                    launch { section("美股行业") {
+                        val quotes=api.usSectorQuotes()
+                        if(generation==requestGeneration) state.update { it.copy(usSectors=quotes) }
+                    } }
+                    launch { section("披露连板") {
+                        val feed=api.limitUpFeed()
+                        if(generation==requestGeneration) state.update { it.copy(limitUp=feed) }
+                    } }
+                    launch { section("官方日历") {
+                        val feed=api.officialAgenda()
+                        if(generation==requestGeneration) state.update { it.copy(agenda=feed) }
                     } }
                     launch { section("美股") {
                         val response=api.get("/v1/us/ai")

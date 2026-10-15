@@ -207,7 +207,7 @@ fun App(model: MarketViewModel) {
                                 item {
                                     AdaptivePair(wide,
                                         first = { LeaderPanel(state, model::openLeader, { leadersPage = true }) },
-                                        second = { LadderPanel(state.demo) },
+                                        second = { LadderPanel(state) },
                                     )
                                 }
                                 item { MonitorPanel(state, model) }
@@ -221,6 +221,20 @@ fun App(model: MarketViewModel) {
                                         if (state.us.isEmpty())
                                             Empty("美国重要标的尚未加载", "连接后读取后端配置的美股观察池")
                                         else state.us.forEach { QuoteRow(it) { model.openStock(it) } }
+                                        if(!state.demo && state.usSectors.isNotEmpty()) {
+                                            HorizontalDivider(color = Line)
+                                            Text("美股行业 ETF 排名", fontWeight = FontWeight.SemiBold)
+                                            state.usSectors.take(5).forEach { QuoteRow(it) { model.openStock(it) } }
+                                            Caption("标普行业 ETF 代理 · 配置池排名 · 不复权价格变化")
+                                        }
+                                        state.agenda?.let { agenda ->
+                                            if(!state.demo && agenda.items.isNotEmpty()) {
+                                                HorizontalDivider(color = Line)
+                                                Text("FOMC 官方日历", fontWeight = FontWeight.SemiBold)
+                                                agenda.items.take(4).forEach { event -> Caption("${event.start} ～ ${event.end} · ${event.title}") }
+                                                Caption("会议日期按纽约日历；确切发布时间未提供。")
+                                            }
+                                        }
                                         EventPanel(MarketScope.US, state, model)
                                         HorizontalDivider(color = Line)
                                         QuoteRow(
@@ -252,6 +266,7 @@ fun App(model: MarketViewModel) {
                                             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                     Panel {
                                         SectionTitle("02", "亚太市场", "区域风向")
+                                        if(state.demo) {
                                         QuoteRow(
                                             Quote(
                                                 "nikkei",
@@ -262,7 +277,9 @@ fun App(model: MarketViewModel) {
                                                 if (state.demo) "演示" else "待接入",
                                             )
                                         )
+                                        } else QuoteRow(state.indices.firstOrNull { it.id == "JP.index.N225" } ?: Quote("JP.index.N225", "日经225", "指数点位", date="未采集"))
                                         EventPanel(MarketScope.JP, state, model)
+                                        if(state.demo) {
                                         QuoteRow(
                                             Quote(
                                                 "kospi",
@@ -273,10 +290,12 @@ fun App(model: MarketViewModel) {
                                                 if (state.demo) "演示" else "待接入",
                                             )
                                         )
+                                        } else QuoteRow(state.indices.firstOrNull { it.id == "KR.index.KS11" } ?: Quote("KR.index.KS11", "韩国KOSPI", "指数点位", date="未采集"))
                                         EventPanel(MarketScope.KR, state, model)
                                     }
                                     Panel {
                                         SectionTitle("03", "A 股风向", "银行 / 大盘 / 双创")
+                                        if(state.demo) {
                                         listOf(
                                                 "中证银行" to "银行",
                                                 "上证指数" to "大盘",
@@ -306,7 +325,12 @@ fun App(model: MarketViewModel) {
                                                     )
                                                 )
                                             }
-                                        Caption("指数点位不可用 ETF 价格替代。以上指数接口尚待后端接入。")
+                                        } else {
+                                            val indices = state.indices.filter { it.id.startsWith("CN.index.") }
+                                            if(indices.isEmpty()) Empty("指数尚未加载", "连接后读取已采集指数点位及实际日期。")
+                                            else indices.forEach { QuoteRow(it) }
+                                        }
+                                        Caption("各指数显示独立交易日的收盘点位；请核对实际日期。")
                                     }
                                             }
                                         },
@@ -689,7 +713,8 @@ private fun LeaderPanel(state: ScreenState, onStock: (Leader) -> Unit, onAll: ()
 }
 
 @Composable
-private fun LadderPanel(demo: Boolean) {
+private fun LadderPanel(state: ScreenState) {
+    val demo = state.demo
     Panel {
         SectionTitle("03", "连板梯队", "市场情绪")
         if (demo) {
@@ -709,7 +734,23 @@ private fun LadderPanel(demo: Boolean) {
                     }
                 }
             Caption("演示梯队 · 非真实涨停或连板统计")
-        } else Empty("连板数据待接入", "后端尚未提供涨停价、特殊交易规则与连续涨停统计。")
+        } else {
+            val feed = state.limitUp
+            if (feed == null) Empty("暂无已采集连板披露", "请检查连接与各区域更新状态。")
+            else {
+                feed.items.groupBy { it.days }.toSortedMap(compareByDescending { it }).forEach { (days, rows) ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("${days}板", color = Rise, fontWeight = FontWeight.Bold)
+                        Column(Modifier.weight(1f)) {
+                            Text(rows.take(8).joinToString(" / ") { it.name }, fontSize = 12.sp)
+                            if(rows.size > 8) Caption("共 ${rows.size} 只，以上显示前 8 只")
+                        }
+                    }
+                }
+                Caption("${feed.date} · ${feed.items.size} 只 · 来源披露的连板数")
+                Caption("${feed.source} · 未完成独立连板规则及全市场范围核验")
+            }
+        }
     }
 }
 

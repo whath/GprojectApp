@@ -13,7 +13,7 @@ import kotlinx.serialization.json.*
 data class DailyUiState(
     val connected: Boolean = false, val loading: Boolean = false, val base: String = "https://ericcself.top",
     val overview: DailyOverview = DailyOverview(), val rankings: Map<String,DailyRanking> = emptyMap(),
-    val funds: Map<String,List<DailyFund>> = emptyMap(), val macro: List<MacroQuote> = emptyList(),
+    val topics: List<FocusTopic> = emptyList(), val funds: Map<String,List<DailyFund>> = emptyMap(), val macro: List<MacroQuote> = emptyList(),
     val calendar: List<CalendarEntry> = emptyList(), val policy: List<PolicyEntry> = emptyList(), val calendarNote: String = "",
     val indices: List<Quote> = emptyList(), val usAi: List<DailyAsset> = emptyList(), val usSectors: List<DailyAsset> = emptyList(),
     val leaders: List<Leader> = emptyList(), val watched: List<DailyAsset> = emptyList(),
@@ -82,21 +82,21 @@ class RevisedViewModel(private val api: MarketRepository = MarketRepository(), i
                     catch (e: Exception) { if (revision == generation) state.update { it.copy(errors = it.errors + (key to failureMessage(e))) } }
                 }
                 coroutineScope {
-                    for (kind in listOf("stock","etf","industry","concept")) {
+                    for (kind in listOf("stock","etf")) {
                         val day = if (kind in listOf("industry","concept")) overview.boards else overview.cn
                         if (day.isNotBlank()) launch { section(dailyKindLabel(kind)+"涨幅榜") {
                             val data = api.dailyRanking(kind, day)
                             if (revision == generation) state.update { it.copy(rankings = it.rankings + (kind to data)) }
                         } }
                     }
-                    if ("board_funds" in overview.features) for (kind in listOf("industry","concept")) launch { section(dailyKindLabel(kind)+"资金") {
-                        val data = api.dailyFunds(kind, overview.boards)
-                        if (revision == generation) state.update { it.copy(funds = it.funds + (kind to data)) }
+                    if ("focus_boards" in overview.features && overview.boards.isNotBlank()) launch { section("关注板块") {
+                        val data=api.dailyFocus(overview.boards)
+                        if(revision==generation) state.update { it.copy(topics=data) }
                     } }
                     if ("macro" in overview.features) launch { section("宏观数据") { val data = api.dailyMacro(); if (revision == generation) state.update { it.copy(macro = data) } } }
                     if ("calendar" in overview.features) launch { section("经济日历") { val data = api.dailyCalendar(); if (revision == generation) state.update { it.copy(calendar = data.items,
                         calendarNote=when { !data.covered -> "当前快照未覆盖全部未来日期，以已列出的事件为准。"; data.stale -> "日历更新暂时失败，当前为保留快照。"; else -> "" }) } } }
-                    if ("policy" in overview.features) launch { section("政策新闻") { val data = api.dailyPolicy(); if (revision == generation) state.update { it.copy(policy = data) } } }
+                    if ("priority_news" in overview.features) launch { section("政策新闻") { val data = api.dailyPolicy(); if (revision == generation) state.update { it.copy(policy = data) } } }
                     launch { section("指数") { val data = api.referenceIndices().filter { it.price != null }; if (revision == generation) state.update { it.copy(indices = data) } } }
                     if (overview.us.isNotBlank()) for ((endpoint,label) in listOf("ai" to "美股观察","sectors" to "美股行业")) launch { section(label) {
                         val data = api.get("/v1/us/$endpoint", mapOf("trade_date" to overview.us)).rows().filter { it.str("status") == "current" && it.num("close") != null }.map { row ->
@@ -148,7 +148,12 @@ class RevisedViewModel(private val api: MarketRepository = MarketRepository(), i
                     val metrics = api.metricsFeed(asset.id, data.candles.lastOrNull()?.date ?: overview.cn)
                     if (metrics.error == null) data = data.copy(metrics = metrics)
                 }
-                val board = asset.id.contains(".industry.") || asset.id.contains(".concept.")
+                if(asset.id.startsWith("CN.stock.") && "intraday" in overview.features) {
+                    try { data=data.copy(intraday=api.dailyIntraday(asset.id,overview.cn)) }
+                    catch(e: CancellationException) { throw e }
+                    catch(_: Exception) { data=data.copy(intradayError="该日分时快照暂不可用，日线仍可查看。") }
+                }
+                val board = (asset.id.contains(".industry.") || asset.id.contains(".concept.")) && !asset.symbol.startsWith("THS_")
                 if (board && overview.members.isNotBlank()) {
                     try { data = data.copy(members = api.dailyMembers(asset.id, overview.members)) }
                     catch (e: CancellationException) { throw e } catch (_: Exception) { }

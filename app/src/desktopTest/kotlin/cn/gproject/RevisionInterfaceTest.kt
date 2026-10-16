@@ -13,7 +13,7 @@ internal fun revisionFixture(): DailyUiState {
     return DailyUiState(connected=true,preview=true,
         overview=DailyOverview("2026-10-15","2026-10-15","2026-10-15","2026-10-15","2026-10-16",stockCount=96),
         rankings=mapOf("stock" to DailyRanking(listOf(stock),stock.date,96,5576),"industry" to DailyRanking(listOf(board),board.date,90,90)),
-        funds=mapOf("industry" to listOf(DailyFund(board.id,board.name,1260000000.0,board.date))),
+        topics=listOf(FocusTopic(board,"industry","半导体设备","eastmoney",1260000000.0)),
         indices=listOf(Quote("CN.index.sh000001","上证指数","指数点位",3950.2,.82,"2026-10-15","fixture"),Quote("CN.index.sz399001","深证成指","指数点位",12805.4,1.13,"2026-10-15","fixture")),
         macro=listOf(MacroQuote("gold","黄金美元参考价",4170.58,"USD/troy_ounce",.84,"percent","2026-10-15",List(30){4000.0+it*4+it%3*9},false,1),
             MacroQuote("brent","布伦特现货",126.55,"USD/barrel",.61,"percent","2026-10-14",List(30){120.0+it*.2+it%3},false,2),
@@ -37,7 +37,7 @@ class RevisionInterfaceTest {
             save("revision-phone-macro")
             onNodeWithText("资讯").performClick()
             onNodeWithText("美国9月消费者价格指数").assertExists()
-            onNodeWithText("政策新闻").performClick()
+            onNodeWithText("政策与资讯").performClick()
             onNodeWithText("中国人民银行调整完善若干货币政策工具").assertExists()
             save("revision-phone-policy")
         } finally { model.close() }

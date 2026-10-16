@@ -96,7 +96,7 @@ class BackendIntegrationTest {
             assertTrue(detail.metrics!!.totalCap!! > 0);assertNotNull(detail.metrics!!.turnover)
             assertEquals(7,repository.referenceIndices().size)
             assertEquals(11,repository.usSectorQuotes().size)
-            assertTrue(repository.disclosures().leaders.isNotEmpty())
+            assertTrue(repository.get("/v1/cn/lhb",mapOf("trade_date" to date)).rows().isNotEmpty())
             val prior = repository.get("/v1/cn/lhb",mapOf("trade_date" to "2026-10-14","limit" to "1","refresh" to "true")).rows().first()
             val seats = repository.seatFeed(prior.str("symbol"),"2026-10-14")
             assertNull(seats.error);assertTrue(seats.items.isNotEmpty())

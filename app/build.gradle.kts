@@ -43,7 +43,7 @@ kotlin {
 android {
     namespace = "cn.gproject"
     compileSdk = 35
-    defaultConfig { applicationId = "cn.gproject"; minSdk = 26; targetSdk = 35; versionCode = 4; versionName = "0.6.2" }
+    defaultConfig { applicationId = "cn.gproject"; minSdk = 26; targetSdk = 35; versionCode = 5; versionName = "0.6.3" }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
 }
 compose.desktop {
@@ -52,7 +52,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Dmg, TargetFormat.Deb)
             packageName = "Gproject"
-            packageVersion = "1.6.2"
+            packageVersion = "1.6.3"
             modules("java.net.http", "jdk.unsupported")
             windows { iconFile.set(project.file("src/desktopMain/resources/brand-icon.ico")); perUserInstall = true; menuGroup = "Gproject"; shortcut = true; upgradeUuid = "34d609b0-a05f-4ba4-87af-ebd07b606399" }
         }

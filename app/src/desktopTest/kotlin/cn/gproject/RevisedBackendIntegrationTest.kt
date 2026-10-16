@@ -18,13 +18,13 @@ class RevisedBackendIntegrationTest {
             val overview=api.dailyOverview()
             assertTrue(overview.features.containsAll(setOf("macro","calendar","policy","gainers","board_funds")))
             val ranking=api.dailyRanking("stock",overview.cn)
-            assertTrue(ranking.items.size>=5);assertEquals(ranking.eligible,ranking.items.size)
-            assertEquals(5,ranking.items.first().periodSessions)
+            assertTrue(ranking.items.size>=5);assertEquals(50,ranking.items.size);assertTrue(ranking.eligible>=50)
+            assertEquals(7,ranking.items.first().periodSessions)
             val macro=api.dailyMacro();assertEquals(setOf("gold","brent","us2y","us10y","us30y"),macro.map { it.id }.toSet())
             assertTrue(macro.all { it.trend.size==30 })
             val calendar=api.dailyCalendar();assertTrue(calendar.items.isNotEmpty());assertTrue(calendar.covered)
             assertTrue(api.dailyPolicy().isNotEmpty())
-            assertTrue(api.dailyFunds("industry",overview.boards).isNotEmpty())
+            assertEquals(22,api.dailyFocus(overview.boards).size);assertEquals(10,api.dailyRanking("etf",overview.cn).items.size);assertTrue(api.dailyIntraday("CN.stock.000001",overview.cn).points.isNotEmpty())
             val asset=DailyAsset("CN.stock.000001","平安银行","000001",date=overview.cn)
             val detail=api.dailyDetail(asset,overview);assertEquals(52,overview.stockHistoryWeeks);assertEquals(52,detail.historyWeeks);assertEquals(241,detail.candles.size);assertTrue(detail.complete)
             val members=api.dailyMembers("CN.industry.BK1036",overview.members)
@@ -46,7 +46,7 @@ class RevisedLiveScreenTest {
             runOnIdle { assertTrue(model.ui.value.errors.isEmpty(),model.ui.value.errors.toString());assertTrue(model.ui.value.policy.isNotEmpty()) }
             save("revision-live-desktop-market")
             onNodeWithText("宏观").performClick();onNodeWithText("黄金美元参考价").assertExists();save("revision-live-desktop-macro")
-            onNodeWithText("资讯").performClick();onNodeWithText("政策新闻").performClick();save("revision-live-desktop-policy")
+            onNodeWithText("资讯").performClick();onNodeWithText("政策与资讯").performClick();save("revision-live-desktop-policy")
         } finally { model.close() }
     }
 

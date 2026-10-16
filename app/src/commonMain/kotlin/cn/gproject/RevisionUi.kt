@@ -48,7 +48,7 @@ fun App(model: RevisedViewModel) {
     var selectedLeader by remember { mutableStateOf<Leader?>(null) }
     val visible = buildList {
         add("市场")
-        if (state.rankings.any { it.key in listOf("industry","concept") && it.value.items.isNotEmpty() } || state.funds.values.any { it.isNotEmpty() }) add("板块")
+        if (state.topics.isNotEmpty()) add("板块")
         if (state.macro.isNotEmpty()) add("宏观")
         if (state.policy.isNotEmpty() || state.calendar.isNotEmpty()) add("资讯")
         add("自选")
@@ -106,13 +106,13 @@ fun App(model: RevisedViewModel) {
                             if (state.preview) DailyNotice("界面测试样本 · 非实时行情")
                             if (!state.connected && !state.preview) WelcomeCard { connection = true }
                             else {
-                                Text(when(active) { "市场" -> "收盘复盘"; "板块" -> "资金与主线"; "宏观" -> "宏观观察"; "资讯" -> "日历与政策"; else -> "我的自选" }, fontSize = 27.sp, fontWeight = FontWeight.Bold)
+                                Text(when(active) { "市场" -> "收盘复盘"; "板块" -> "资金与主线"; "宏观" -> "宏观观察"; "资讯" -> "日历与资讯"; else -> "我的自选" }, fontSize = 27.sp, fontWeight = FontWeight.Bold)
                                 Spacer(Modifier.height(6.dp))
                                 Text(when(active) {
                                     "市场" -> "A股 ${state.overview.cn}  ·  美股 ${state.overview.us}"
-                                    "板块" -> "东方财富分类  ·  ${state.overview.boards}"
+                                    "板块" -> "行业 / 概念 · 各来源独立分类 · ${state.overview.boards}"
                                     "宏观" -> "各来源独立公布日期，价格与收益率分别呈现"
-                                    "资讯" -> "未来 7 天经济事件与近期官方政策"
+                                    "资讯" -> "经济日历、中国政策、美国官方与机构原文"
                                     else -> "只关注自己需要的标的"
                                 }, color = Muted, fontSize = 12.sp)
                             }
@@ -141,7 +141,7 @@ fun App(model: RevisedViewModel) {
 @Composable
 private fun WelcomeCard(onConnect: () -> Unit) = DailyCard {
     Text("让数据回到复盘本身", fontSize = 25.sp, fontWeight = FontWeight.Bold)
-    Text("收盘行情、5 日涨幅榜、板块资金，以及宏观和政策资讯。", color = Muted, fontSize = 14.sp, lineHeight = 23.sp)
+    Text("收盘行情、7 日涨幅榜、22 个关注方向，以及宏观和分级资讯。", color = Muted, fontSize = 14.sp, lineHeight = 23.sp)
     Button(onClick = onConnect, modifier = Modifier.testTag("daily-connect")) { Text("连接我的数据服务") }
     Text("访问令牌仅保存在本次会话中。", color = Muted, fontSize = 11.sp)
 }
@@ -214,14 +214,15 @@ private fun RankingBrowser(state: DailyUiState, kinds: List<String>, model: Revi
     val ranking = state.rankings[kind]
     var count by rememberSaveable(kind,ranking?.snapshot) { mutableStateOf(30) }
     DailyCard {
-        SectionHeading("近 5 日涨幅榜", "6 个对齐收盘价计算 · 仅含已验证标的")
+        SectionHeading("近 7 日涨幅榜", "8 个对齐收盘价计算 · 个股前50 / ETF前10")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             kinds.filter { state.rankings[it]?.items?.isNotEmpty() == true }.forEach { key ->
                 FilterChip(selected = kind == key, onClick = { selected = key }, label = { Text(kindName(key)) })
             }
         }
         if (ranking != null) {
-            Text("${ranking.eligible} 个可用 / ${ranking.expected} 个目录标的 · ${ranking.date}", color = Muted, fontSize = 11.sp)
+            Text("${ranking.eligible} / ${ranking.expected} 个符合窗口条件 · 展示前${if(kind=="stock") 50 else 10} · ${ranking.date}", color = Muted, fontSize = 11.sp)
+            if(ranking.missing>0) Text("另有 ${ranking.missing} 只窗口数据未核实，已排除；当前为已验证样本榜。",color=Warm,fontSize=11.sp)
             ranking.items.take(count).forEach { AssetRow(it) { model.open(it) } }
             if(ranking.items.size>count) TextButton(onClick={count+=30}) { Text("查看更多（$count / ${ranking.items.size}）") }
             Text(if (kind in listOf("stock","etf")) "前复权价格涨幅；缺日和过期标的不参与排名。" else "板块指数收盘价涨幅。", color = Muted, fontSize = 10.sp)
@@ -239,7 +240,7 @@ private fun AssetRow(asset: DailyAsset, trailing: (@Composable () -> Unit)? = nu
                 Text(asset.symbol, color = Muted, fontSize = 11.sp)
             }
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                asset.close?.let { Text(decimal(it), fontSize = 14.sp) }
+                asset.close?.let { Text(decimal(it,if(asset.id.startsWith("CN.etf.")) 3 else 2), fontSize = 14.sp) }
                 asset.change?.let { Text(pct(it), fontSize = 13.sp, color = color(it), fontWeight = FontWeight.SemiBold) }
             }
             if (trailing != null) trailing()
@@ -253,27 +254,30 @@ private fun kindName(kind: String) = when(kind) { "stock" -> "个股"; "etf" -> 
 private fun BoardBrowser(state: DailyUiState, model: RevisedViewModel) {
     var funds by rememberSaveable { mutableStateOf(false) }
     var kind by rememberSaveable { mutableStateOf("industry") }
-    val actualKind=kind.takeIf { state.funds[it]?.isNotEmpty()==true } ?: state.funds.keys.firstOrNull { state.funds[it]?.isNotEmpty()==true } ?: kind
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(!funds, { funds = false }, label = { Text("5 日涨幅") })
-            if (state.funds.values.any { it.isNotEmpty() }) FilterChip(funds, { funds = true }, label = { Text("5 日资金") })
+    val rows=state.topics.filter { it.kind==kind && (!funds || it.net!=null) }
+    DailyCard {
+        SectionHeading("关注方向", "${state.topics.size} / 22 个方向 · 按发布方区分行业与概念")
+        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+            listOf("industry","concept").forEach { key -> FilterChip(kind==key,{kind=key},label={Text(kindName(key))}) }
         }
-        if (!funds) RankingBrowser(state, listOf("industry","concept"), model)
-        else DailyCard {
-            SectionHeading("板块主力资金", "近 5 个交易日净额合计 · 东方财富口径")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("industry","concept").filter { state.funds[it]?.isNotEmpty() == true }.forEach { key -> FilterChip(actualKind == key, { kind = key }, label = { Text(kindName(key)) }) }
-            }
-            state.funds[actualKind].orEmpty().forEach { row ->
-                Surface(onClick = { model.open(DailyAsset(row.id,row.name,row.id.substringAfterLast('.'),date=row.date)) }, color = Color.Transparent) {
-                    Row(Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
-                        Text(row.name, Modifier.weight(1f), fontSize = 14.sp); Text(money(row.net), color = color(row.net), fontWeight = FontWeight.Medium, fontSize = 13.sp)
+        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+            FilterChip(!funds,{funds=false},label={Text("7 日涨幅")})
+            FilterChip(funds,{funds=true},label={Text("7 日资金")})
+        }
+        rows.forEach { row ->
+            Column {
+                if(!funds) AssetRow(row.asset) { model.open(row.asset) }
+                else Surface(onClick={model.open(row.asset)},color=Color.Transparent) {
+                    Row(Modifier.fillMaxWidth().padding(vertical=12.dp)) {
+                        Text(row.asset.name,Modifier.weight(1f),fontSize=14.sp)
+                        Text(money(row.net),color=color(row.net),fontSize=13.sp)
                     }
                 }
+                Text("${if(row.classification=="ths") "同花顺" else "东方财富"} · ${kindName(row.kind)} · ${row.publisherName}",fontSize=10.sp,color=Muted)
+                HorizontalDivider(Modifier.padding(top=8.dp),color=Line)
             }
-            Text("主力净额为大单与超大单净额之和，不代表市场新增资金。", color = Muted, fontSize = 11.sp, lineHeight = 18.sp)
         }
+        Text(if(funds) "近7个交易日主力净额合计，人民币元；同花顺两项未提供可核验资金口径，因此不列入资金榜。" else "使用各发布方的独立指数；AIDC与数据中心保留各自定义。",fontSize=11.sp,color=Muted,lineHeight=18.sp)
     }
 }
 
@@ -320,24 +324,35 @@ private fun NewsBrowser(state: DailyUiState) {
     var policy by rememberSaveable { mutableStateOf(state.calendar.isEmpty()) }
     var country by rememberSaveable { mutableStateOf("") }
     var count by rememberSaveable { mutableStateOf(30) }
+    var newsGroup by rememberSaveable { mutableStateOf("CN") }
     val uri = LocalUriHandler.current
     var linkError by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (state.calendar.isNotEmpty()) FilterChip(!policy, { policy = false;count = 30 }, label = { Text("经济日历") })
-            if (state.policy.isNotEmpty()) FilterChip(policy, { policy = true;count = 30 }, label = { Text("政策新闻") })
+            if (state.policy.isNotEmpty()) FilterChip(policy, { policy = true;count = 30 }, label = { Text("政策与资讯") })
         }
         if (linkError) DailyNotice("暂时无法打开浏览器，请稍后重试。")
         if (policy) {
-            state.policy.take(count).forEach { item -> DailyCard {
+            Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(7.dp)) {
+                listOf("CN" to "中国政策","official" to "美国官方","research" to "券商投研","company" to "公司发布").forEach { (key,label) ->
+                    FilterChip(newsGroup==key,{newsGroup=key;count=30},label={Text(label)})
+                }
+            }
+            val news=state.policy.filter { when(newsGroup) {
+                "CN" -> it.region=="CN"; "official" -> it.region=="US" && it.level in setOf("government","central_bank");else -> it.region=="US" && it.level==newsGroup
+            } }
+            Text("仅展示白名单发布方的原文；中国为中央及部委，美国为官方、重要投研与公司。",fontSize=11.sp,color=Muted,lineHeight=18.sp)
+            news.take(count).forEach { item -> DailyCard {
                 Row { Text(item.publisher, Modifier.weight(1f), fontSize = 11.sp, color = Fall); Text(item.date, fontSize = 11.sp, color = Muted) }
                 Text(item.title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, lineHeight = 25.sp)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(when(item.category) { "policy_document" -> "政策文件"; "interpretation" -> "政策解读"; else -> "官方发布" }, Modifier.weight(1f), color = Muted, fontSize = 11.sp)
+                    Text(when(item.level) { "central" -> "中央机关"; "ministry" -> "国家部委"; "government" -> "美国政府"; "central_bank" -> "美联储"; "research" -> "机构投研"; else -> "公司发布" }, Modifier.weight(1f), color = Muted, fontSize = 11.sp)
                     TextButton(onClick = { try { uri.openUri(item.url) } catch (_: Exception) { linkError = true } }) { Text("查看原文 ↗", fontSize = 12.sp) }
                 }
             } }
-            if (state.policy.size > count) OutlinedButton(onClick = { count += 30 }, modifier = Modifier.fillMaxWidth()) { Text("继续查看政策") }
+            if (news.size > count) OutlinedButton(onClick = { count += 30 }, modifier = Modifier.fillMaxWidth()) { Text("继续查看资讯") }
+            if(news.isEmpty()) Text("当前窗口暂无此类白名单原文",fontSize=13.sp,color=Muted)
         } else {
             if(state.calendarNote.isNotBlank()) DailyNotice(state.calendarNote)
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -397,7 +412,7 @@ private fun DailyDetailPage(detail: DailyDetail, state: DailyUiState, wide: Bool
             val last = detail.candles.lastOrNull()
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(last?.let { decimal(it.close) } ?: detail.asset.close?.let { decimal(it) } ?: detail.asset.name, fontSize = 33.sp, fontWeight = FontWeight.Bold)
+                    Text(last?.let { decimal(it.close,if(detail.asset.id.startsWith("CN.etf.")) 3 else 2) } ?: detail.asset.close?.let { decimal(it,if(detail.asset.id.startsWith("CN.etf.")) 3 else 2) } ?: detail.asset.name, fontSize = 33.sp, fontWeight = FontWeight.Bold)
                     last?.let { Text("${it.date} · ${if(detail.asset.id.contains(".industry.") || detail.asset.id.contains(".concept.")) "板块指数点位" else detail.currency}", color = Muted, fontSize = 11.sp) }
                     detail.asset.change?.let { Text("${detail.asset.periodSessions} 日涨幅 ${pct(it)}", color = color(it), fontSize = 13.sp) }
                 }
@@ -409,17 +424,7 @@ private fun DailyDetailPage(detail: DailyDetail, state: DailyUiState, wide: Bool
             if (!detail.loading && detail.error == null && detail.candles.isEmpty()) Text("当前标的尚无已采集日线。", color = Muted, fontSize = 13.sp)
         } }
         if (detail.candles.isNotEmpty()) item { DailyCard {
-            var visible by rememberSaveable(detail.asset.id) { mutableStateOf(90) }
-            val shown = if(detail.historyWeeks==52) detail.candles.takeLast(visible) else detail.candles
-            SectionHeading(if(detail.historyWeeks==52) "近 52 周日线" else "近 30 个交易日日线", "已返回 ${detail.candles.size} 日 · 不复权价格")
-            if(detail.historyWeeks==52) Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                listOf(30 to "近30日",90 to "近90日",400 to "52周").forEach { (count,label) ->
-                    FilterChip(visible==count,{visible=count},label={Text(label)})
-                }
-            }
-            CompactCandles(shown)
-            Text("${shown.first().date} — ${shown.last().date}", color = Muted, fontSize = 10.sp)
-            if (!detail.complete) Text("窗口内存在未验证交易日，请结合已返回日期查看。", color = Warm, fontSize = 11.sp)
+            RevisionChart(detail)
         } }
         detail.metrics?.let { metrics -> item { DailyCard {
             SectionHeading("估值与规模", metrics.date)
@@ -448,10 +453,10 @@ private fun DailyDetailPage(detail: DailyDetail, state: DailyUiState, wide: Bool
 }
 
 @Composable
-private fun CompactCandles(bars: List<Candle>) {
+internal fun CompactCandles(bars: List<Candle>, gesture: Modifier = Modifier, digits: Int = 2) {
     var selected by remember(bars) { mutableStateOf(bars.lastIndex) }
     val focused = bars[selected.coerceIn(bars.indices)]
-    Canvas(Modifier.fillMaxWidth().height(225.dp).testTag("daily-candles").pointerInput(bars) {
+    Canvas(Modifier.fillMaxWidth().height(225.dp).testTag("daily-candles").then(gesture).pointerInput(bars) {
         detectTapGestures { point -> selected = (point.x / size.width * bars.size).toInt().coerceIn(bars.indices) }
     }) {
         val (low,high) = chartPriceBounds(bars.flatMap { listOf(it.low,it.high) }); val span = high-low
@@ -466,7 +471,7 @@ private fun CompactCandles(bars: List<Candle>) {
         val x=(selected+.5f)*step
         drawLine(Muted.copy(alpha=.4f),Offset(x,0f),Offset(x,size.height),1f)
     }
-    Text("${focused.date}  开 ${decimal(focused.open)}  高 ${decimal(focused.high)}\n低 ${decimal(focused.low)}  收 ${decimal(focused.close)}", fontSize = 11.sp, color = Muted, lineHeight = 18.sp)
+    Text("${focused.date}  开 ${decimal(focused.open,digits)}  高 ${decimal(focused.high,digits)}\n低 ${decimal(focused.low,digits)}  收 ${decimal(focused.close,digits)}", fontSize = 11.sp, color = Muted, lineHeight = 18.sp)
 }
 
 @Composable

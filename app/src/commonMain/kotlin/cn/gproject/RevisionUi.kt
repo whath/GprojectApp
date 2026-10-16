@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.*
@@ -25,6 +26,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -472,8 +474,10 @@ private fun DailyConnection(state: DailyUiState, model: RevisedViewModel, onDism
     var base by remember { mutableStateOf(state.base) }; var token by remember { mutableStateOf("") }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("连接数据服务") },
         text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedTextField(base,{base=it},label={Text("HTTPS 地址")},singleLine=true,modifier=Modifier.testTag("daily-base"))
-            OutlinedTextField(token,{token=it},label={Text("访问令牌")},singleLine=true,visualTransformation=PasswordVisualTransformation(),modifier=Modifier.testTag("daily-token"))
+            OutlinedTextField(base,{base=it},label={Text("HTTPS 地址")},singleLine=true,
+                keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Uri,autoCorrectEnabled=false),modifier=Modifier.testTag("daily-base"))
+            OutlinedTextField(token,{token=it},label={Text("访问令牌")},singleLine=true,visualTransformation=PasswordVisualTransformation(),
+                keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Password,autoCorrectEnabled=false),modifier=Modifier.testTag("daily-token"))
             Text("令牌仅用于本次连接，不随安装包保存。",fontSize=11.sp,color=Muted)
         } }, confirmButton = { TextButton(onClick = { model.connect(base,token);if(token.isNotBlank() && base.startsWith("https://")) onDismiss() }) { Text("连接") } },
         dismissButton = { Row { if(state.connected) TextButton(onClick={model.disconnect();onDismiss()}) { Text("断开") }; TextButton(onClick=onDismiss) { Text("取消") } } })

@@ -1,8 +1,8 @@
-# 观市 · GprojectApp 0.6.1
+# 观市 · GprojectApp 0.6.2
 
 Kotlin Compose Multiplatform 的 Android/Windows 个人收盘观察应用，依据后端当前真实数据结构重构。后端：[GprojectBack](https://github.com/whath/GprojectBack)，正式地址 `https://ericcself.top`，需要支持 v0.6.x 的服务和个人 Bearer Token。
 
-2026-10-16：52 周 A 股行情已完成真实服务联调，88 项测试通过、0 失败、0 跳过；APK 和 Windows 便携包构建通过。手机可切换近 30 日、近 90 日和 52 周图表。详见 [52 周联调记录](docs/HISTORY_52W_20261016.md)。本轮未新增 Android 真机安装验证，未构建 MSI。
+2026-10-16：0.6.2 修复 Android 输入法将访问令牌按拼音组合处理的问题；连接框启用密码键盘并禁用自动纠正。已在荣耀 ALI-AN00（Android 13）安装并直连正式 HTTPS 服务，搜索平安银行后确认 52 周图表显示真实 241 个交易日；88 项测试通过、0 失败、0 跳过。APK 和 Windows 便携包构建通过，未构建 MSI。详见 [52 周与真机联调记录](docs/HISTORY_52W_20261016.md)。
 
 ## 当前页面
 
@@ -35,7 +35,7 @@ Kotlin Compose Multiplatform 的 Android/Windows 个人收盘观察应用，依�
 ./gradlew.bat :app:createDistributable
 ```
 
-APK：`app/build/outputs/apk/debug/app-debug.apk`（开发签名）。Windows：`app/build/compose/binaries/main/app/Gproject/Gproject.exe`，须携带整个同目录 app/runtime。业务与 Android 版本 0.6.1，桌面原生包版本 1.6.1。
+APK：`app/build/outputs/apk/debug/app-debug.apk`（开发签名）。Windows：`app/build/compose/binaries/main/app/Gproject/Gproject.exe`，须携带整个同目录 app/runtime。业务与 Android 版本 0.6.2（versionCode 4），桌面原生包版本 1.6.2；兼容后端 0.6.1。
 
 真实服务测试只有明确提供 `GPROJECT_API_BASE`、`GPROJECT_API_TOKEN` 才运行；本轮已设置并实测全部通过。不要把令牌写入源码或命令日志。GitHub Actions 的无凭证 CI 会跳过真实服务测试并运行其余回归和构建。
 

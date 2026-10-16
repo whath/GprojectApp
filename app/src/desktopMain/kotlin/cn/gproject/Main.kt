@@ -9,7 +9,7 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 
 fun main() = application {
-    val model = remember { MarketViewModel() }
+    val model = remember { RevisedViewModel() }
     DisposableEffect(Unit) { onDispose { model.close() } }
     Window(
         onCloseRequest = ::exitApplication,

@@ -1,90 +1,42 @@
-# 观市 · GprojectApp
+# 观市 · GprojectApp 0.6.0
 
-**2026-10-15 免费数据扩展：** 后台 v0.5.0 已上线；接入 7 个指数、配置股分钟图、估值市值及派生换手率、来源披露连板、美股行业 ETF 排名、完整龙虎榜分页/席位及 FOMC 日期日历。88 项测试全部通过，包含真实 HTTPS 解析，Android 构建通过；尚未安装真机。账号积分及付费来源继续搁置。详见 [免费数据联调](docs/FREE_DATA_20261015.md)。
+Kotlin Compose Multiplatform 的 Android/Windows 个人收盘观察应用，依据后端当前真实数据结构重构。后端：[GprojectBack](https://github.com/whath/GprojectBack)，正式地址 `https://ericcself.top`，需要支持 v0.6.x 的服务和个人 Bearer Token。
 
-**同日较早真实 API 对接（v0.4.2）：** 已同步客户端基线 `d447380`，使用 https://ericcself.top 的后台 v0.4.2 完成实际请求/解析验收，84 项测试与 Android 构建通过。个股资金、关键词新闻已取得生产数据；THS 完整成员、THS 逐日板块资金仍受来源限制。10 月 15 日国内配置池日线为 8/112，10 月 14 日保留完整配置池快照，自动采集/补采仍暂停。详见 [本轮联调记录](docs/BACKEND_INTEGRATION_20261015.md)。
+2026-10-16：87 项测试通过，0 失败、0 跳过，包含正式 HTTPS 解析、390×844 手机尺寸与 1240×900 桌面页面渲染；APK 和 Windows 便携运行目录构建通过。**本轮未安装 Android 真机，也未构建 MSI。** 详见 [本轮界面与联调记录](docs/REVISION_20261016.md)。
 
-Kotlin + Compose Multiplatform + Jetpack ViewModel / MVVM 的 Android、Windows 双端收盘观察应用。
+## 当前页面
 
-前端独立仓库：https://github.com/whath/GprojectApp 。后端保留在 https://github.com/whath/GprojectBack 。
+1. 市场：已有市场指数、A 股/ETF 近 5 日涨幅、11 类美股行业 ETF 代理、AI 配置观察、龙虎榜和席位。
+2. 板块：东方财富行业/概念的 5 日榜与主力净额。点击进入 30 日日线、资金和完整当前成分，只有已有行情的成分可以继续打开详情。
+3. 宏观：黄金美元参考、布油现货、美债 2/10/30 年期平价收益率，最近 30 个来源观测。收益率变动显示 bp，与商品价格百分比区分。
+4. 资讯：未来 7 天经济日历与 5 个官方来源政策新闻；保留公布/预期/前值/修订前值，政策可打开原文。
+5. 自选：从现有涨幅榜/详情加入，名称代码本地保存，也可搜索已有日线的 A 股。
 
-后台开发交接清单：[前端所需接口与业务逻辑](docs/BACKEND_REQUIREMENTS.md)。文档区分当前已调用接口、后台待实现契约及需要双端开发的后续功能。
+手机使用底部导航，900dp 以上使用侧栏；无可用数据的模块不会生成空导航页。行情详情只请求近 30 个市场交易日，缺日明确提示，不补造数据。已去掉连板、信号雷达、模型分析/配置、长历史和空接口占位。生产入口不提供演示切换；界面测试样本只在测试代码中注入并标识。
 
-## 运行
+## 连接与数据口径
 
-需要 JDK 17、Android SDK 35。Android Studio 打开本目录，配置 `local.properties` 中的 `sdk.dir`，或设置 `ANDROID_HOME`。Windows 执行：
+首次打开点击“连接我的数据服务”，输入 HTTPS 地址和已有访问令牌。令牌只在会话内保存，不写磁盘、Git 或产物；真实请求失败会提示并保留可用数据，不替换为模拟行情。手动刷新触发查询，不触发后台采集，没有自动轮询或推送。
+
+后台当前 A 股/美股行情截至 2026-10-15，成分观测日为 2026-10-16。5 日榜覆盖 104/5576 股票、2/1702 ETF、77/496 行业、2/508 概念；页面显示实际覆盖，不表示全市场数据完整。
+
+股票/ETF 的 5 日收益用一次同源前复权快照计算，报价和 30 日图表是实际不复权收盘。板块是东方财富独立 BK 编码，不能与 THS 同名分类混接；成分是当前观测，非历史关系。主力净额是来源定义的大单+超大单，不是市场全部现金流。
+
+宏观有各自发布日期与延迟：黄金是新浪 XAU CFD 美元参考，非 LBMA 定盘或期货主连；布油为 EIA 现货；美债为美国财政部平价收益率。政策是官方当前列表，不保证历史文章穷尽。日历北京时间是计划公布时刻，事件可能修订。后端自动采集、补采、巡检和电脑自动备份继续关闭，新日期需要显式手工采集。
+
+## 构建
+
+需要 JDK 17、Android SDK 35。在 Android Studio 打开项目，使用 `local.properties` 的 sdk.dir 或 ANDROID_HOME 指定 SDK。
 
 ```powershell
 ./gradlew.bat :app:run
-./gradlew.bat :app:assembleDebug
 ./gradlew.bat :app:desktopTest
+./gradlew.bat :app:assembleDebug
 ./gradlew.bat :app:createDistributable
 ```
 
-- APK：`app/build/outputs/apk/debug/app-debug.apk`，开发签名，用于内测，不是应用商店发行包。
-- Windows：`app/build/compose/binaries/main/app/Gproject/Gproject.exe`。必须保留同目录 app/runtime 文件夹；完整目录可复制部署，无需另装 Java。
-- MSI：Windows 执行 `:app:packageMsi`，Compose 插件准备 WiX；输出 `app/build/compose/binaries/main/msi/Gproject-1.0.0.msi`。仅当前用户安装，默认路径 `%LOCALAPPDATA%\Gproject`，未配置发行签名。
-- GitHub Actions 每次推送 main 构建 Android APK、Windows 完整目录、MSI 及界面预览并上传构建产物；工作流运行成功后可在 Actions 下载。
+APK：`app/build/outputs/apk/debug/app-debug.apk`（开发签名）。Windows：`app/build/compose/binaries/main/app/Gproject/Gproject.exe`，须携带整个同目录 app/runtime。业务与 Android 版本 0.6.0，桌面原生包版本 1.6.0。
 
-## 四个 Tab
+真实服务测试只有明确提供 `GPROJECT_API_BASE`、`GPROJECT_API_TOKEN` 才运行；本轮已设置并实测全部通过。不要把令牌写入源码或命令日志。GitHub Actions 的无凭证 CI 会跳过真实服务测试并运行其余回归和构建。
 
-1. **今日主线**：行业排行、逐条龙虎榜、连板梯队、重点板块资金与成分表现。点击行业或板块标签切换重点观察。
-2. **全球行情**：美股观察池和纽约金主连、布伦特原油；日经、韩国综合；A 股银行、大盘、创业板、科创 50。
-3. **信号雷达**：顶部风险、下跌趋势、回调横盘、放量突破、底部反转五组预设，提供参数、命中依据、确认与失效条件；自定义模式保留 MA3/5/8/12/15/20/125、Wilder RSI14、量比与突破的 AND 筛选。
-4. **观察池**：从筛选结果手动加入，支持移出和置顶、本地保存；同步个股、所属同花顺行业走势与近 5/10/20 日资金变化。大模型 API 预留入口也位于这里与连接设置中。
-
-暖白背景、深墨绿文字、低饱和砖红上涨 / 鼠尾草绿下跌。900dp 以上左侧导航与双列内容，手机底部导航。默认空状态，需主动选择演示或连接，模拟数据始终带演示提示。
-
-## 连接与数据边界
-
-设置内填写 HTTPS API 根地址和 Bearer token。令牌只保存在内存，不写入磁盘、日志、构建产物或 Git。HTTP 和自动重定向关闭；服务端需可信证书。服务公网入口未启用时不能在手机上直接连接，客户端不会擅自开启后端公网访问。
-
-**已经对接**：行业排行、龙虎榜、美股配置观察池、板块当日成分快照与日线、A 股已登记标的和日线筛选。日期、来源、缺失状态显示在界面；真实请求失败不降级成演示数据。
-
-**当前来源/接口边界**：个股主力资金和关键词新闻已接入后台；THS 逐日板块资金、完整 THS 成分、完整计划事件仍有来源缺口。指数、配置股分钟与估值、披露连板已接入；金油主连及严格连板规则核验仍有缺口。生产模式保留缺失状态，不以成交额充当资金流、不用 ETF 价格充当指数。演示仅用于产品与交互验收。
-
-筛选通过每页 500 条的分页读取全部已登记 A 股，不再限制前 30 只；每只读取最多 250 根不复权日线，最多 4 个行情请求并行。界面显示总数、进度、有效和缺失/失败数，可停止扫描，部分结果明确标识。完整交易所范围仍取决于后端目录与采集覆盖，不把扫描完现有目录等同于全部上市公司数据齐全。仅最新日期等于服务目标交易日、单一来源、有足够数据的标的参与计算。窗口是实际观测日线，不自动补交易日；缺日及除权分红可能影响指标。观察池独立于扫描范围，重新筛选不会自动增删观察池。资金、事件与观察池支持应用内每 5 分钟更新，没有后台推送。
-
-API 凭证、筛选参数与详情选择在当前会话内有效；监控开关、关注板块、5/10/20 日窗口、已读事件版本、个股观察池与置顶状态本地保存。国内模型入口支持服务标记、HTTPS 根地址、模型/部署 ID 与仅内存 API Key；本版只预留分析接口，尚不调用模型。演示操作不覆盖真实设置。详见 [观察池与模型扩展说明](docs/WATCH_POOL_AI.md)。
-
-## 资金监控、重点事件与技术组合
-
-- 板块详情优先展示近 5／10／20 个交易日资金柱图、累计净额和逐日流入／流出。关注板块连续至少 3 个已观测交易日净流出时，在应用首页提醒；缺数和历史快照单独标识。
-- 全球行情的美股、日本、韩国、黄金和原油各自展示关联事件，可查看出处、发布时间、发生时间和标记已读。过期条目自动过滤，同一事件跨市场共享已读状态。
-- 应用内每 5 分钟刷新，可暂停或手动更新；Android 进入后台暂停，恢复前台刷新。没有关闭 App 后的推送。
-- 技术组合以蜡烛形态、趋势、支撑阻力和量能为参考，输出观察与确认条件，不预判必然主升。具体口径见 [技术规则](docs/TECHNICAL_RULES.md)。
-- 个股资金和关键词新闻已完成真实解析；完整 THS 板块资金和计划事件仍待合格源。字段、数据校验与对接步骤见 [监控接口约定](docs/INTELLIGENCE_API.md)。
-
-## 板块与个股详情
-
-- 点击首页板块进入独立详情。Windows 左侧列出可切换板块，手机顶部使用横向板块标签；成分列表可继续进入个股详情，返回保留所选板块。
-- 龙虎榜支持“查看全部”与逐条点击个股，个股页保留所选披露的上榜原因和净买额。
-- 个股支持分时、日K、周K、月K切换，日均线采用 MA3/5/8/12/15/20/125，周／月均线采用对应周期 MA5/10/20；提供成交量、点选 OHLC、缩放及历史滑块。Android 系统返回逐级返回详情来源。
-- K 线采用统一价格刻度、右侧价格轴、价量对齐的十字线和当前选中收盘标签。点击或横向拖动查看 OHLC、周期涨跌与均线数值；均线可隐藏，支持历史翻页、回到最新和专注图表模式。均线参与可视价格范围计算，避免出界裁切；缺失成交量用点标记，不补为零。
-- 日均线统一 MA3/5/8/12/15/20/125，可逐条显隐。MACD(12,26,9) 和个股主力资金副图与 K 线同步选日和历史范围；周/月指标按对应周期计算，资金缺日不汇总。真实个股资金等待后端实现 [可选接口](docs/STOCK_FUNDS.md)，演示数据明确标为模拟。
-- 真实日线来自 `/v1/bars/{instrument_id}?limit=2000&end=目标日期`，使用不复权 OHLC。周线以周一为起点，月线按自然月聚合，首尾周期及有缺失交易日的周期不保证完整。不同来源不能混合，缺失成交量不补为零，成交量保留股／手口径。
-- 分时后端尚未提供，真实模式展示待接入，演示模式提供明确标记的模拟分钟走势。常规数据展示开高低收、前次观测收盘、成交量、成交额；换手率、总市值、市盈率暂无接口，显示缺失状态。
-
-## 结构
-
-```text
-app/src/commonMain/kotlin/cn/gproject/
-  App.kt       Compose 界面与响应式布局
-  Market.kt    数据模型、Repository、ViewModel、指标算法、独立演示数据
-app/src/androidMain/    Android Activity、OkHttp 引擎
-app/src/desktopMain/    桌面窗口、CIO 引擎
-app/src/commonTest/     指标边界与数值格式测试
-app/src/desktopTest/    接口合约、双尺寸渲染与交互测试
-```
-
-View → StateFlow → Jetpack ViewModel → Repository → 现有只读 API。切换连接、演示和筛选时取消旧任务，关闭 ViewModel 清理客户端。
-
-版本选型参考 [Compose 1.8.2 官方说明](https://kotlinlang.org/docs/multiplatform/whats-new-compose-180.html) 与 [Compose 兼容说明](https://kotlinlang.org/docs/multiplatform/compose-compatibility-and-versioning.html)。锁定 Kotlin 2.1.20、Compose 1.8.2、AGP 8.7.3、Gradle 8.14，不使用动态版本。
-
-## 界面预览（演示数据）
-
-![桌面今日主线](docs/screenshots/desktop-today.png)
-
-手机界面：[今日主线](docs/screenshots/phone-today.png) · [全球行情](docs/screenshots/phone-global.png) · [信号雷达](docs/screenshots/phone-signals.png) · [技术筛选](docs/screenshots/phone-filters.png)。
-
-详细测试范围与未完成边界见 [验收记录](docs/VALIDATION.md)。
+当前字段以 [v0.6.0 后台契约](https://github.com/whath/GprojectBack/blob/main/docs/DAILY-DATA-CONTRACT-v0.6.0.md) 为准。旧的 BACKEND_REQUIREMENTS、技术信号、长历史和模型文档仅为早期设计存档。

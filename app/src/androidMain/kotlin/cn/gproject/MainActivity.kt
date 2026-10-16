@@ -12,7 +12,7 @@ class MainActivity : ComponentActivity() {
         MonitorStorage.context = applicationContext
         enableEdgeToEdge()
         setContent {
-            val model = viewModel { MarketViewModel() }
+            val model = viewModel { RevisedViewModel() }
             App(model)
         }
     }

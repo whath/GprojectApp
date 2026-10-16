@@ -16,11 +16,11 @@ data class DailyCalendar(val items: List<CalendarEntry>, val stale: Boolean, val
 data class PolicyEntry(val id: String, val title: String, val publisher: String, val date: String, val url: String, val category: String)
 data class DailyOverview(val cn: String = "", val us: String = "", val boards: String = "", val lhb: String = "",
     val members: String = "", val targets: Map<String,String> = emptyMap(), val features: Set<String> = emptySet(),
-    val detailFeatures: Map<String,Set<String>> = emptyMap(), val stockCount: Int = 0)
+    val detailFeatures: Map<String,Set<String>> = emptyMap(), val stockCount: Int = 0, val stockHistoryWeeks: Int = 0)
 data class BoardMember(val id: String, val name: String, val symbol: String, val available: Boolean)
 data class DailyDetail(val asset: DailyAsset, val candles: List<Candle> = emptyList(), val loading: Boolean = true,
     val error: String? = null, val complete: Boolean = false, val funds: List<Pair<String,Double>> = emptyList(),
-    val members: List<BoardMember> = emptyList(), val metrics: StockMetrics? = null, val currency: String = "CNY")
+    val members: List<BoardMember> = emptyList(), val metrics: StockMetrics? = null, val currency: String = "CNY", val historyWeeks: Int = 0)
 
 internal fun JsonObject.intValue(key: String): Int = (this[key] as? JsonPrimitive)?.intOrNull ?: error("服务数据缺少 $key")
 internal fun JsonObject.flag(key: String): Boolean = (this[key] as? JsonPrimitive)?.booleanOrNull ?: false
@@ -77,7 +77,7 @@ internal suspend fun MarketRepository.dailyOverview(): DailyOverview {
         data["calendar_targets"]!!.jsonObject.mapValues { it.value.jsonPrimitive.content },
         data["features"]!!.jsonObject.filterValues { it.jsonPrimitive.booleanOrNull == true }.keys,
         data["detail_features"]?.jsonObject?.mapValues { (_,v) -> v.jsonArray.map { it.jsonPrimitive.content }.toSet() }.orEmpty(),
-        data.intValue("cn_stocks_with_history"))
+        data.intValue("cn_stocks_with_history"), ((data["stock_history_weeks"] as? JsonPrimitive)?.intOrNull ?: 0).also { require(it in setOf(0,52)) })
 }
 
 internal suspend fun MarketRepository.dailyRanking(kind: String, day: String): DailyRanking = parseDailyRanking(dailyPages("/v1/cn/rankings",
@@ -124,8 +124,14 @@ internal suspend fun MarketRepository.dailyPolicy(): List<PolicyEntry> = get("/v
 
 internal suspend fun MarketRepository.dailyDetail(asset: DailyAsset, overview: DailyOverview): DailyDetail {
     val day = asset.date.ifBlank { if (asset.id.startsWith("US.")) overview.us else overview.cn }
-    val data = get("/v1/bars/${asset.id}", mapOf("end" to day, "limit" to "30"))
-    require(data.str("adjustment") == "none" && data.intValue("window_sessions") == 30)
+    val extended = asset.id.startsWith("CN.stock.") && overview.stockHistoryWeeks == 52
+    val data = get("/v1/bars/${asset.id}", buildMap {
+        put("end",day);put("limit",if(extended) "400" else "30")
+        if(extended) put("weeks","52")
+    })
+    require(data.str("adjustment") == "none")
+    val window = data.intValue("window_sessions")
+    require(if(extended) data.intValue("window_weeks")==52 && window in 200..260 else window==30) { "日线窗口不一致" }
     require(data["instrument"]!!.jsonObject.str("id") == asset.id)
     val rows = data.rows().map { row ->
         val open = requireNotNull(row.num("open")); val high = requireNotNull(row.num("high")); val low = requireNotNull(row.num("low")); val close = requireNotNull(row.num("close"))
@@ -133,10 +139,10 @@ internal suspend fun MarketRepository.dailyDetail(asset: DailyAsset, overview: D
         Candle(checkedDate(row.str("trade_date")), open, high, low, close, row.num("volume"), row.num("amount"),
             row.str("source").also { require(it.isNotBlank()) }, row.str("volume_unit"), row.num("change_pct"))
     }
-    require(rows.size <= 30 && rows.zipWithNext().all { it.first.date < it.second.date }) { "日线日期或窗口异常" }
+    require(rows.size <= window && rows.zipWithNext().all { it.first.date < it.second.date } && rows.all { it.date <= day }) { "日线日期或窗口异常" }
     require(rows.map { it.source }.distinct().size <= 1) { "日线来源不一致" }
     val currency = data["instrument"]!!.jsonObject.str("currency")
-    return DailyDetail(asset, rows, false, complete=(data["history_coverage"] as? JsonObject)?.flag("complete") == true, currency=currency)
+    return DailyDetail(asset, rows, false, complete=(data["history_coverage"] as? JsonObject)?.flag("complete") == true, currency=currency, historyWeeks=if(extended) 52 else 0)
 }
 
 internal suspend fun MarketRepository.dailyMembers(id: String, observed: String): List<BoardMember> {

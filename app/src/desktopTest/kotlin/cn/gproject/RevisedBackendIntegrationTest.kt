@@ -26,7 +26,7 @@ class RevisedBackendIntegrationTest {
             assertTrue(api.dailyPolicy().isNotEmpty())
             assertTrue(api.dailyFunds("industry",overview.boards).isNotEmpty())
             val asset=DailyAsset("CN.stock.000001","平安银行","000001",date=overview.cn)
-            assertEquals(30,api.dailyDetail(asset,overview).candles.size)
+            val detail=api.dailyDetail(asset,overview);assertEquals(52,overview.stockHistoryWeeks);assertEquals(52,detail.historyWeeks);assertEquals(241,detail.candles.size);assertTrue(detail.complete)
             val members=api.dailyMembers("CN.industry.BK1036",overview.members)
             assertTrue(members.size>100);assertEquals(members.size,members.map { it.id }.distinct().size)
         } finally { api.close() }
@@ -50,7 +50,7 @@ class RevisedLiveScreenTest {
         } finally { model.close() }
     }
 
-    @Test fun phoneRendersRealBackendAndThirtySessionDetail() = runDesktopComposeUiTest(390,844) {
+    @Test fun phoneRendersRealBackendAndFiftyTwoWeekDetail() = runDesktopComposeUiTest(390,844) {
         val base=System.getenv("GPROJECT_API_BASE");val token=System.getenv("GPROJECT_API_TOKEN")
         org.junit.Assume.assumeTrue("Live API credentials not supplied",base!=null && token!=null)
         val model=RevisedViewModel()
@@ -63,8 +63,8 @@ class RevisedLiveScreenTest {
             onNodeWithText("宏观").performClick();onNodeWithText("黄金美元参考价").assertExists();save("revision-live-phone-macro")
             runOnIdle { model.open(DailyAsset("CN.stock.000001","平安银行","000001",date=model.ui.value.overview.cn)) }
             waitUntil(timeoutMillis=45000) { model.ui.value.detail?.loading==false }
-            runOnIdle { assertEquals(30,model.ui.value.detail!!.candles.size);assertTrue(model.ui.value.detail!!.error.isNullOrBlank()) }
-            onNodeWithTag("daily-candles").assertExists();save("revision-live-phone-detail")
+            runOnIdle { assertEquals(241,model.ui.value.detail!!.candles.size);assertEquals(52,model.ui.value.detail!!.historyWeeks);assertTrue(model.ui.value.detail!!.error.isNullOrBlank()) }
+            onNodeWithText("52周").performClick();onNodeWithTag("daily-candles").assertExists();save("revision-live-phone-detail-52w")
         } finally { model.close() }
     }
 

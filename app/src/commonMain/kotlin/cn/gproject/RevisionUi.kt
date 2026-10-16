@@ -74,7 +74,7 @@ fun App(model: RevisedViewModel) {
                         }
                     }
                     Spacer(Modifier.weight(1f))
-                    Text("近 30 个交易日\n数据与来源，清楚可见", color = Muted, fontSize = 11.sp, lineHeight = 20.sp)
+                    Text("收盘行情与资讯\n数据与来源，清楚可见", color = Muted, fontSize = 11.sp, lineHeight = 20.sp)
                 }
                 Scaffold(Modifier.weight(1f), containerColor = Paper,
                     topBar = {
@@ -82,7 +82,7 @@ fun App(model: RevisedViewModel) {
                             if (state.detail != null) IconButton(onClick = model::back, modifier = Modifier.testTag("daily-back")) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "返回") }
                             Column(Modifier.weight(1f)) {
                                 Text(if (state.detail != null) state.detail!!.asset.name else if (wide) "收盘数据工作台" else "观市", fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                                Text(if (state.detail != null) state.detail!!.asset.symbol else "近 30 个交易日", fontSize = 11.sp, color = Muted)
+                                Text(if (state.detail != null) state.detail!!.asset.symbol else if(state.overview.stockHistoryWeeks==52) "A 股近 52 周日线" else "近 30 个交易日", fontSize = 11.sp, color = Muted)
                             }
                             if (state.loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                             IconButton(onClick = model::refresh, enabled = state.connected && !state.loading, modifier = Modifier.testTag("daily-refresh")) { Icon(Icons.Outlined.Refresh, "刷新数据") }
@@ -139,7 +139,7 @@ fun App(model: RevisedViewModel) {
 @Composable
 private fun WelcomeCard(onConnect: () -> Unit) = DailyCard {
     Text("让数据回到复盘本身", fontSize = 25.sp, fontWeight = FontWeight.Bold)
-    Text("近 30 日行情、5 日涨幅榜、板块资金，以及宏观和政策资讯。", color = Muted, fontSize = 14.sp, lineHeight = 23.sp)
+    Text("收盘行情、5 日涨幅榜、板块资金，以及宏观和政策资讯。", color = Muted, fontSize = 14.sp, lineHeight = 23.sp)
     Button(onClick = onConnect, modifier = Modifier.testTag("daily-connect")) { Text("连接我的数据服务") }
     Text("访问令牌仅保存在本次会话中。", color = Muted, fontSize = 11.sp)
 }
@@ -407,9 +407,16 @@ private fun DailyDetailPage(detail: DailyDetail, state: DailyUiState, wide: Bool
             if (!detail.loading && detail.error == null && detail.candles.isEmpty()) Text("当前标的尚无已采集日线。", color = Muted, fontSize = 13.sp)
         } }
         if (detail.candles.isNotEmpty()) item { DailyCard {
-            SectionHeading("近 30 个交易日日线", "已返回 ${detail.candles.size} 日 · 不复权价格")
-            CompactCandles(detail.candles)
-            Text("${detail.candles.first().date} — ${detail.candles.last().date}", color = Muted, fontSize = 10.sp)
+            var visible by rememberSaveable(detail.asset.id) { mutableStateOf(90) }
+            val shown = if(detail.historyWeeks==52) detail.candles.takeLast(visible) else detail.candles
+            SectionHeading(if(detail.historyWeeks==52) "近 52 周日线" else "近 30 个交易日日线", "已返回 ${detail.candles.size} 日 · 不复权价格")
+            if(detail.historyWeeks==52) Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                listOf(30 to "近30日",90 to "近90日",400 to "52周").forEach { (count,label) ->
+                    FilterChip(visible==count,{visible=count},label={Text(label)})
+                }
+            }
+            CompactCandles(shown)
+            Text("${shown.first().date} — ${shown.last().date}", color = Muted, fontSize = 10.sp)
             if (!detail.complete) Text("窗口内存在未验证交易日，请结合已返回日期查看。", color = Warm, fontSize = 11.sp)
         } }
         detail.metrics?.let { metrics -> item { DailyCard {

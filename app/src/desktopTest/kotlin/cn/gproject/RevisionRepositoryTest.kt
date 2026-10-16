@@ -44,6 +44,26 @@ class RevisionRepositoryTest {
         finally { api.close() }
     }
 
+    @Test fun fiftyTwoWeekStockDetailUsesExplicitWindowAndKeepsOtherAssetsAtThirty(): Unit = runBlocking {
+        var calls=0
+        val api=MarketRepository(HttpClient(MockEngine { request ->
+            val extended=request.url.encodedPath.contains("CN.stock.")
+            if(extended) { assertEquals("52",request.url.parameters["weeks"]);assertEquals("400",request.url.parameters["limit"]) }
+            else { assertNull(request.url.parameters["weeks"]);assertEquals("30",request.url.parameters["limit"]) }
+            val id=if(extended) "CN.stock.000001" else "US.stock.NVDA"
+            val window=if(extended) "\"window_sessions\":241,\"window_weeks\":52" else "\"window_sessions\":30"
+            calls++
+            respond("""{"instrument":{"id":"$id","currency":"CNY"},"adjustment":"none",$window,"items":[{"trade_date":"2026-10-15","open":10,"high":11,"low":9,"close":10,"source":"test"}]}""",HttpStatusCode.OK)
+        }),requestSpacingMillis=0)
+        try {
+            api.base="https://example.test"
+            val overview=DailyOverview(stockHistoryWeeks=52)
+            assertEquals(52,api.dailyDetail(DailyAsset("CN.stock.000001","平安银行","000001",date="2026-10-15"),overview).historyWeeks)
+            assertEquals(0,api.dailyDetail(DailyAsset("US.stock.NVDA","NVDA","NVDA",date="2026-10-15"),overview).historyWeeks)
+            assertEquals(2,calls)
+        } finally { api.close() }
+    }
+
     @Test fun watchPersistenceDoesNotCarryModelConfigurationOrCredentials() {
         val encoded=encodeDailyWatch(listOf(DailyAsset("CN.stock.000001","平安银行","000001"),DailyAsset("US.stock.NVDA","NVDA","NVDA",periodSessions=1)))
         assertFalse(encoded.contains("token"));assertFalse(encoded.contains("ai"));assertFalse(encoded.contains("model"))

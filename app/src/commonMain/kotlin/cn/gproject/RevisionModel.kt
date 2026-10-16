@@ -14,6 +14,7 @@ data class DailyUiState(
     val connected: Boolean = false, val loading: Boolean = false, val base: String = "https://ericcself.top",
     val overview: DailyOverview = DailyOverview(), val rankings: Map<String,DailyRanking> = emptyMap(),
     val topics: List<FocusTopic> = emptyList(), val funds: Map<String,List<DailyFund>> = emptyMap(), val macro: List<MacroQuote> = emptyList(),
+    val agenda: ImportantAgenda = ImportantAgenda(), val watchQuotes: Map<String,WatchClose> = emptyMap(), val watchLoading: Boolean = false,
     val calendar: List<CalendarEntry> = emptyList(), val policy: List<PolicyEntry> = emptyList(), val calendarNote: String = "",
     val indices: List<Quote> = emptyList(), val usAi: List<DailyAsset> = emptyList(), val usSectors: List<DailyAsset> = emptyList(),
     val leaders: List<Leader> = emptyList(), val watched: List<DailyAsset> = emptyList(),
@@ -42,6 +43,8 @@ class RevisedViewModel(private val api: MarketRepository = MarketRepository(), i
     private var work: Job? = null
     private var detailWork: Job? = null
     private var searchWork: Job? = null
+    private var watchWork: Job? = null
+    private var watchGeneration = 0
     private var generation = 0
     private var detailGeneration = 0
     private var searchGeneration = 0
@@ -51,16 +54,16 @@ class RevisedViewModel(private val api: MarketRepository = MarketRepository(), i
         if (!address.matches(Regex("https://[A-Za-z0-9.-]+(?::[0-9]+)?(?:/[A-Za-z0-9_./-]*)?")) || token.isBlank()) {
             state.update { it.copy(message = "请输入 HTTPS 服务地址和访问令牌") }; return
         }
-        generation++; detailGeneration++; searchGeneration++
-        work?.cancel(); detailWork?.cancel(); searchWork?.cancel()
+        generation++; detailGeneration++; searchGeneration++; watchGeneration++
+        work?.cancel(); detailWork?.cancel(); searchWork?.cancel(); watchWork?.cancel()
         api.base = address; api.token = token.trim()
         state.value = DailyUiState(connected = true, base = address, watched = state.value.watched)
         refresh()
     }
 
     fun disconnect() {
-        generation++; detailGeneration++; searchGeneration++
-        work?.cancel(); detailWork?.cancel(); searchWork?.cancel(); api.token = ""
+        generation++; detailGeneration++; searchGeneration++; watchGeneration++
+        work?.cancel(); detailWork?.cancel(); searchWork?.cancel(); watchWork?.cancel(); api.token = ""
         state.value = DailyUiState(base = state.value.base, watched = state.value.watched)
     }
 
@@ -73,6 +76,7 @@ class RevisedViewModel(private val api: MarketRepository = MarketRepository(), i
                 val overview = api.dailyOverview()
                 if (revision != generation) return@launch
                 state.update { it.copy(overview = overview, errors = it.errors - "连接") }
+                refreshWatch()
                 val gate = Semaphore(3)
                 suspend fun section(key: String, action: suspend () -> Unit) {
                     try {
@@ -96,6 +100,9 @@ class RevisedViewModel(private val api: MarketRepository = MarketRepository(), i
                     if ("macro" in overview.features) launch { section("宏观数据") { val data = api.dailyMacro(); if (revision == generation) state.update { it.copy(macro = data) } } }
                     if ("calendar" in overview.features) launch { section("经济日历") { val data = api.dailyCalendar(); if (revision == generation) state.update { it.copy(calendar = data.items,
                         calendarNote=when { !data.covered -> "当前快照未覆盖全部未来日期，以已列出的事件为准。"; data.stale -> "日历更新暂时失败，当前为保留快照。"; else -> "" }) } } }
+                    if ("important_calendar" in overview.features) launch { section("重要日程") {
+                        val data=api.importantAgenda();if(revision==generation) state.update { it.copy(agenda=data) }
+                    } }
                     if ("priority_news" in overview.features) launch { section("政策新闻") { val data = api.dailyPolicy(); if (revision == generation) state.update { it.copy(policy = data) } } }
                     launch { section("指数") { val data = api.referenceIndices().filter { it.price != null }; if (revision == generation) state.update { it.copy(indices = data) } } }
                     if (overview.us.isNotBlank()) for ((endpoint,label) in listOf("ai" to "美股观察","sectors" to "美股行业")) launch { section(label) {
@@ -175,12 +182,28 @@ class RevisedViewModel(private val api: MarketRepository = MarketRepository(), i
     fun back() { detailGeneration++; detailWork?.cancel(); state.update { it.copy(detail = null) } }
     fun toggleWatch(asset: DailyAsset) {
         val rows = state.value.watched.let { if (it.any { row -> row.id == asset.id }) it.filterNot { row -> row.id == asset.id } else (it + asset).takeLast(100) }
-        state.update { it.copy(watched = rows) }
+        state.update { it.copy(watched = rows,watchQuotes=it.watchQuotes.filterKeys { id -> rows.any { it.id==id } }) }
+        refreshWatch()
         if (!state.value.preview) runCatching { writeWorkspacePreferences(encodeDailyWatch(rows)) }.onFailure { state.update { it.copy(message = "自选暂未保存，本次会话仍然有效") } }
+    }
+    fun refreshWatch() {
+        watchWork?.cancel();val revision=++watchGeneration
+        val current=state.value
+        if(!current.connected || current.preview || current.watched.isEmpty()) { state.update { it.copy(watchLoading=false) };return }
+        val requested=current.watched;val overview=current.overview
+        state.update { it.copy(watchLoading=true) }
+        watchWork=viewModelScope.launch {
+            try {
+                val quotes=api.watchCloses(requested,overview)
+                if(revision==watchGeneration) state.update { it.copy(watchQuotes=quotes,errors=it.errors-"自选报价") }
+            } catch(e: CancellationException) { throw e }
+            catch(e: Exception) { if(revision==watchGeneration) state.update { it.copy(errors=it.errors+("自选报价" to failureMessage(e))) } }
+            finally { if(revision==watchGeneration) state.update { it.copy(watchLoading=false) } }
+        }
     }
     fun dismissMessage() { state.update { it.copy(message = "") } }
     suspend fun seats(leader: Leader) = api.seatFeed(leader.symbol, leader.date)
-    fun close() { generation++; detailGeneration++; searchGeneration++; work?.cancel(); detailWork?.cancel(); searchWork?.cancel(); api.close() }
+    fun close() { generation++; detailGeneration++; searchGeneration++; watchGeneration++; work?.cancel(); detailWork?.cancel(); searchWork?.cancel(); watchWork?.cancel(); api.close() }
     override fun onCleared() { close() }
 }
 

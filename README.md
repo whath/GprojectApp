@@ -1,16 +1,16 @@
-# 观市 · GprojectApp 0.6.3
+# 观市 · GprojectApp 0.6.4
 
-Kotlin Compose Multiplatform 的 Android/Windows 个人收盘观察应用，依据后端当前真实数据结构重构。后端：[GprojectBack](https://github.com/whath/GprojectBack)，正式地址 `https://ericcself.top`，需要支持 v0.6.x 的服务和个人 Bearer Token。
+Kotlin Compose Multiplatform 的 Android/Windows 个人收盘观察应用，依据后端当前真实数据结构重构。后端：[GprojectBack](https://github.com/whath/GprojectBack)，正式地址 `https://ericcself.top`，需要支持 v0.6.4 的服务和个人 Bearer Token。
 
-2026-10-16：0.6.3 已完成7日涨幅、个股前50/ETF前10、22个关注方向、分级原文资讯和A股分时/52周缩放。后端0.6.3已上线，93项测试通过、0失败、0跳过，包含正式HTTPS与手机/桌面渲染。荣耀ALI-AN00（Android13）已实测；Android APK和Windows便携包已构建。详见 [本轮验收](docs/SEVEN_DAY_20261016.md)。0.6.2的密码键盘修复保留，生产令牌不进入产物。
+2026-10-16：0.6.4 已完成中美重要会议、重点数据公布日程、经济日历高重要性过滤、独立自选收盘报价，以及价格轴、成交量、MA/MACD/KDJ/RSI/BOLL和同步形态解释。后端0.6.4已上线；客户端105项通过、0失败、0跳过，含正式HTTPS及手机/桌面渲染；荣耀ALI-AN00 / Android13已安装versionCode6并逐项验收，Android APK和Windows便携包已构建并检查未含生产令牌。详见 [本轮验收](docs/CALENDAR_STUDIES_20261016.md)，原7日榜和22方向见 [0.6.3记录](docs/SEVEN_DAY_20261016.md)。
 
 ## 当前页面
 
 1. 市场：已有市场指数、A 股近7日涨幅前50、全境内ETF合格样本前10、11 类美股行业 ETF 代理、AI 配置观察、龙虎榜和席位。
 2. 板块：只显示22个指定方向，行业12、概念10。东方财富20项提供7日涨幅、主力净额与当前成分；同花顺独立提供AIDC、算力租赁行情，不显示未验证资金或跨来源成分；稳定币暂不展示。
 3. 宏观：黄金美元参考、布油现货、美债 2/10/30 年期平价收益率，最近 30 个来源观测。收益率变动显示 bp，与商品价格百分比区分。
-4. 资讯：未来7天经济日历；中国中央/国家部委政策、美国政府/美联储、高盛/摩根士丹利公开投研、英伟达官方发布分开筛选，均保留原文与发布日期。
-5. 自选：从现有涨幅榜/详情加入，名称代码本地保存，也可搜索已有日线的 A 股。
+4. 资讯：中美重要会议、重要数据公布（未来7/30/90天），经济日历仅保留来源评级3—4级；中国中央/国家部委政策、美国政府/美联储、高盛/摩根士丹利公开投研、英伟达官方发布分开筛选，均保留原文与发布日期。
+5. 自选：从榜单/详情或搜索加入，名称代码本地保存；独立请求已存收盘价格、日涨跌、日期和币种，榜外标的也可显示，旧价格明确标记。
 
 手机使用底部导航，900dp 以上使用侧栏；无可用数据的模块不会生成空导航页。A 股详情按服务能力读取近 52 周，其他类别保留原 30 日窗口；缺日明确提示，不补造数据。已去掉连板、信号雷达、模型分析/配置、无界历史扩容和空接口占位。生产入口不提供演示切换；界面测试样本只在测试代码中注入并标识。
 
@@ -21,6 +21,8 @@ Kotlin Compose Multiplatform 的 Android/Windows 个人收盘观察应用，依�
 后台行情截至2026-10-15，资讯已刷新至10月16日；成分为10月16日当下观测。7日窗口需8个对齐收盘价：A股5549/5577，28项自然排除、未解释缺日0；ETF1684/1702，上市时间不足14、未核实4。只展示个股前50、ETF前10；ETF缺口明确提示，不能称为无缺口全目录榜。
 
 股票/ETF收益使用一次同源前复权快照，报价和日线是不复权价格；ETF报价三位小数。A股详情支持收盘分时价格线、近30/90日与52周，双指缩放、横拖平移和桌面按钮均改变实际可视窗口；本轮分时是10月15日快照，不是实时行情。沪深北5565只分时与日线收盘核对，另12只停牌或尚未上市。
+
+K线和分时显示价格轴；日线下有成交量、MA、MACD、KDJ、RSI、BOLL与所选日期形态说明，主副图点选同步。指标先用完整已存日线计算，再裁切显示，不随缩放重新预热；采用不复权价格，除权除息可能影响。数据不足、成交量单位未核实会说明，缺值不补零。分时模式显示价量，日线指标切回日线查看。
 
 22个方向按各发布方分类，BK与THS身份不混接；主力资金是来源定义的大单+超大单净额，不代表全部现金流。旧5日接口仍由后端兼容，当前客户端显式请求7日。
 
@@ -37,8 +39,10 @@ Kotlin Compose Multiplatform 的 Android/Windows 个人收盘观察应用，依�
 ./gradlew.bat :app:createDistributable
 ```
 
-APK：`app/build/outputs/apk/debug/app-debug.apk`（开发签名）。Windows：`app/build/compose/binaries/main/app/Gproject/Gproject.exe`，须携带整个同目录 app/runtime。业务与 Android 版本 0.6.2（versionCode 4），桌面原生包版本 1.6.2；兼容后端 0.6.1。
+APK：`app/build/outputs/apk/debug/app-debug.apk`（开发签名）。Windows：`app/build/compose/binaries/main/app/Gproject/Gproject.exe`，须携带整个同目录 app/runtime。业务与 Android 版本 0.6.4（versionCode 6），桌面原生包版本 1.6.4；新日程和自选功能需要后端0.6.4。
 
 真实服务测试只有明确提供 `GPROJECT_API_BASE`、`GPROJECT_API_TOKEN` 才运行；本轮已设置并实测全部通过。不要把令牌写入源码或命令日志。GitHub Actions 的无凭证 CI 会跳过真实服务测试并运行其余回归和构建。
+
+新增日程、自选与技术指标口径见 [v0.6.4契约](https://github.com/whath/GprojectBack/blob/main/docs/CALENDAR-STUDIES-v0.6.4.md)。BLS直连受限，有限窗口内的补充事件单独标明来源；会议与日程不保证穷尽，未知日期不推算。
 
 当前 A 股年度窗口见 [0.6.1 契约](https://github.com/whath/GprojectBack/blob/main/docs/HISTORY-52W-v0.6.1.md)，其余字段沿用 0.6.0 契约。旧的 BACKEND_REQUIREMENTS、技术信号、长历史和模型文档仅为早期设计存档。

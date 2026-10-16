@@ -50,7 +50,7 @@ fun App(model: RevisedViewModel) {
         add("市场")
         if (state.topics.isNotEmpty()) add("板块")
         if (state.macro.isNotEmpty()) add("宏观")
-        if (state.policy.isNotEmpty() || state.calendar.isNotEmpty()) add("资讯")
+        if (state.policy.isNotEmpty() || state.calendar.isNotEmpty() || state.agenda.items.isNotEmpty()) add("资讯")
         add("自选")
     }
     val active = tab.takeIf { it in visible } ?: "市场"
@@ -112,7 +112,7 @@ fun App(model: RevisedViewModel) {
                                     "市场" -> "A股 ${state.overview.cn}  ·  美股 ${state.overview.us}"
                                     "板块" -> "行业 / 概念 · 各来源独立分类 · ${state.overview.boards}"
                                     "宏观" -> "各来源独立公布日期，价格与收益率分别呈现"
-                                    "资讯" -> "经济日历、中国政策、美国官方与机构原文"
+                                    "资讯" -> "中美重要会议、数据公布、经济日历与权威资讯"
                                     else -> "只关注自己需要的标的"
                                 }, color = Muted, fontSize = 12.sp)
                             }
@@ -321,19 +321,22 @@ private fun LazyListScope.newsContent(state: DailyUiState) {
 
 @Composable
 private fun NewsBrowser(state: DailyUiState) {
-    var policy by rememberSaveable { mutableStateOf(state.calendar.isEmpty()) }
+    var newsTab by rememberSaveable { mutableStateOf(if(state.calendar.isEmpty()) "policy" else "economic") }
     var country by rememberSaveable { mutableStateOf("") }
     var count by rememberSaveable { mutableStateOf(30) }
     var newsGroup by rememberSaveable { mutableStateOf("CN") }
     val uri = LocalUriHandler.current
     var linkError by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (state.calendar.isNotEmpty()) FilterChip(!policy, { policy = false;count = 30 }, label = { Text("经济日历") })
-            if (state.policy.isNotEmpty()) FilterChip(policy, { policy = true;count = 30 }, label = { Text("政策与资讯") })
+        Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(newsTab=="economic", { newsTab="economic";count=30 }, label={Text("经济日历")})
+            FilterChip(newsTab=="meeting", { newsTab="meeting";count=30 }, label={Text("重要会议")},modifier=Modifier.testTag("news-meetings"))
+            FilterChip(newsTab=="release", { newsTab="release";count=30 }, label={Text("数据公布")},modifier=Modifier.testTag("news-releases"))
+            FilterChip(newsTab=="policy", { newsTab="policy";count=30 }, label={Text("政策与资讯")})
         }
         if (linkError) DailyNotice("暂时无法打开浏览器，请稍后重试。")
-        if (policy) {
+        if(newsTab in setOf("meeting","release")) { ImportantCalendarBrowser(state.agenda,newsTab) }
+        else if (newsTab=="policy") {
             Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(7.dp)) {
                 listOf("CN" to "中国政策","official" to "美国官方","research" to "券商投研","company" to "公司发布").forEach { (key,label) ->
                     FilterChip(newsGroup==key,{newsGroup=key;count=30},label={Text(label)})
@@ -358,7 +361,8 @@ private fun NewsBrowser(state: DailyUiState) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                 listOf("" to "全部", "CN" to "中国", "US" to "美国", "JP" to "日本", "KR" to "韩国").forEach { (code,label) -> FilterChip(country == code, { country = code;count = 30 }, label = { Text(label) }) }
             }
-            val events = state.calendar.filter { country.isBlank() || it.country == country }
+            Text("仅保留高重要性事件（来源评级3—4级）",fontSize=11.sp,color=Muted)
+            val events = state.calendar.filter { it.importance>=3 && (country.isBlank() || it.country == country) }
             events.take(count).forEach { event -> DailyCard {
                 val local = Instant.parse(event.time).toLocalDateTime(TimeZone.of("Asia/Shanghai"))
                 Row { Text("${local.date}  ${local.hour.toString().padStart(2,'0')}:${local.minute.toString().padStart(2,'0')} 北京时间", Modifier.weight(1f), fontSize = 11.sp, color = Muted)
@@ -397,10 +401,26 @@ private fun WatchBrowser(state: DailyUiState, model: RevisedViewModel) {
         DailyCard {
             SectionHeading("自选标的", "保存在当前设备，可随时移除")
             if (state.watched.isEmpty()) Text("在涨幅榜或标的详情中加入自选。", color = Muted, fontSize = 13.sp)
-            val quotes = (state.rankings.values.flatMap { it.items } + state.usAi + state.usSectors).associateBy { it.id }
-            state.watched.forEach { saved -> AssetRow(quotes[saved.id] ?: saved, trailing = {
-                IconButton(onClick = { model.toggleWatch(saved) }, modifier = Modifier.testTag("daily-remove-${saved.id}")) { Icon(Icons.Outlined.Close, "移除自选", Modifier.size(17.dp)) }
-            }) { model.open(quotes[saved.id] ?: saved) } }
+            Row(verticalAlignment=Alignment.CenterVertically) {
+                Text("已存收盘价 · 每日涨跌幅",Modifier.weight(1f),fontSize=11.sp,color=Muted)
+                if(state.watchLoading) CircularProgressIndicator(Modifier.size(15.dp),strokeWidth=2.dp)
+                else TextButton(onClick=model::refreshWatch,enabled=state.connected && !state.preview,modifier=Modifier.testTag("watch-refresh")) { Text("刷新报价",fontSize=11.sp) }
+            }
+            state.watched.forEach { saved ->
+                val quote=state.watchQuotes[saved.id]
+                val asset=quote?.asset?.copy(name=saved.name.ifBlank { quote.asset.name },symbol=saved.symbol.ifBlank { quote.asset.symbol }) ?: saved.copy(close=null,change=null,date="")
+                val unit=if(saved.id.contains(".industry.") || saved.id.contains(".concept.")) "指数点位" else quote?.currency.orEmpty()
+                Column(Modifier.testTag("watch-row-${saved.id}")) {
+                    AssetRow(asset,trailing={
+                        IconButton(onClick={model.toggleWatch(saved)},modifier=Modifier.testTag("daily-remove-${saved.id}")) { Icon(Icons.Outlined.Close,"移除自选",Modifier.size(17.dp)) }
+                    }) { model.open(asset.copy(date=if(saved.id.startsWith("US.")) state.overview.us else state.overview.cn)) }
+                    Text(when { asset.close==null -> if(state.watchLoading) "正在读取收盘价" else "暂无已验证价格"
+                        quote?.status=="stale" -> "${asset.date} 收盘 · $unit · 早于当前快照，可能停牌或数据未更新"
+                        else -> "${asset.date} 收盘 · $unit" },fontSize=10.sp,color=Muted,modifier=Modifier.testTag("watch-date-${saved.id}"))
+                    if(quote?.changeBasis?.startsWith("unadjusted_close")==true) Text("涨跌按相邻交易日不复权收盘价计算，除权除息可能影响。",fontSize=10.sp,color=Muted)
+                    HorizontalDivider(color=Line,modifier=Modifier.padding(top=9.dp))
+                }
+            }
         }
     }
 }
@@ -450,28 +470,6 @@ private fun DailyDetailPage(detail: DailyDetail, state: DailyUiState, wide: Bool
             if(detail.members.size>count) TextButton(onClick={count+=50}) { Text("查看更多成分（$count / ${detail.members.size}）") }
         } }
     }
-}
-
-@Composable
-internal fun CompactCandles(bars: List<Candle>, gesture: Modifier = Modifier, digits: Int = 2) {
-    var selected by remember(bars) { mutableStateOf(bars.lastIndex) }
-    val focused = bars[selected.coerceIn(bars.indices)]
-    Canvas(Modifier.fillMaxWidth().height(225.dp).testTag("daily-candles").then(gesture).pointerInput(bars) {
-        detectTapGestures { point -> selected = (point.x / size.width * bars.size).toInt().coerceIn(bars.indices) }
-    }) {
-        val (low,high) = chartPriceBounds(bars.flatMap { listOf(it.low,it.high) }); val span = high-low
-        fun y(price: Double) = (size.height * (1-(price-low)/span)).toFloat()
-        for(i in 1..3) drawLine(Line,Offset(0f,size.height*i/4),Offset(size.width,size.height*i/4),1f)
-        val step = size.width / bars.size
-        bars.forEachIndexed { i,bar ->
-            val x = (i+.5f)*step; val tint = if(bar.close>=bar.open) Rise else Fall
-            drawLine(tint,Offset(x,y(bar.high)),Offset(x,y(bar.low)),1.dp.toPx())
-            drawRect(tint,Offset(x-step*.28f,min(y(bar.open),y(bar.close))), Size(step*.56f,max(abs(y(bar.close)-y(bar.open)),1.5.dp.toPx())))
-        }
-        val x=(selected+.5f)*step
-        drawLine(Muted.copy(alpha=.4f),Offset(x,0f),Offset(x,size.height),1f)
-    }
-    Text("${focused.date}  开 ${decimal(focused.open,digits)}  高 ${decimal(focused.high,digits)}\n低 ${decimal(focused.low,digits)}  收 ${decimal(focused.close,digits)}", fontSize = 11.sp, color = Muted, lineHeight = 18.sp)
 }
 
 @Composable

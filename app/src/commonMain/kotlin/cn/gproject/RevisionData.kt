@@ -18,8 +18,8 @@ data class DailyOverview(val cn: String = "", val us: String = "", val boards: S
     val members: String = "", val targets: Map<String,String> = emptyMap(), val features: Set<String> = emptySet(),
     val detailFeatures: Map<String,Set<String>> = emptyMap(), val stockCount: Int = 0, val stockHistoryWeeks: Int = 0)
 data class FocusTopic(val asset: DailyAsset, val kind: String, val publisherName: String, val classification: String, val net: Double?)
-data class SnapshotMinutePoint(val timestamp: String, val close: Double)
-data class IntradaySnapshot(val date: String, val points: List<SnapshotMinutePoint>, val status: String, val note: String = "")
+data class SnapshotMinutePoint(val timestamp: String, val close: Double, val volume: Double? = null)
+data class IntradaySnapshot(val date: String, val points: List<SnapshotMinutePoint>, val status: String, val note: String = "", val volumeUnit: String = "source_unit_unverified")
 
 data class BoardMember(val id: String, val name: String, val symbol: String, val available: Boolean)
 data class DailyDetail(val asset: DailyAsset, val candles: List<Candle> = emptyList(), val loading: Boolean = true,
@@ -122,11 +122,11 @@ internal suspend fun MarketRepository.dailyIntraday(id: String, day: String): In
     require(data.str("source")=="public/tencent-minute/v1" && data.str("adjustment")=="none" && data.str("timezone")=="Asia/Shanghai")
     val points=data.rows().map { row ->
         val stamp=row.str("timestamp");require(stamp.startsWith(day+"T") && stamp.endsWith("+08:00"));Instant.parse(stamp)
-        SnapshotMinutePoint(stamp,requireNotNull(row.num("close")).also { require(it>0) })
+        SnapshotMinutePoint(stamp,requireNotNull(row.num("close")).also { require(it>0) },row.num("volume")?.also { require(it>=0) })
     }
     require(points.isNotEmpty() && points.size<=242 && points.map { it.timestamp }.distinct().size==points.size && points.zipWithNext().all { it.first.timestamp<it.second.timestamp })
     require(points.last().timestamp.substring(11,16)=="15:00")
-    return IntradaySnapshot(day,points,"current")
+    return IntradaySnapshot(day,points,"current",volumeUnit=data.str("volume_unit"))
 }
 
 internal suspend fun MarketRepository.dailyMacro(): List<MacroQuote> = get("/v1/macro/assets").rows().map { row ->
@@ -141,8 +141,8 @@ internal suspend fun MarketRepository.dailyMacro(): List<MacroQuote> = get("/v1/
 
 internal suspend fun MarketRepository.dailyCalendar(): DailyCalendar {
     val today = Clock.System.now().toLocalDateTime(TimeZone.of("Asia/Shanghai")).date
-    val data=get("/v1/economic-calendar", mapOf("start" to today.toString(), "end" to today.plus(DatePeriod(days=7)).toString(), "limit" to "1000"))
-    val items=data.rows().map { row ->
+    val data=get("/v1/economic-calendar", mapOf("start" to today.toString(), "end" to today.plus(DatePeriod(days=7)).toString(), "limit" to "1000", "min_importance" to "3"))
+    val items=data.rows().filter { it.intValue("importance") >= 3 }.map { row ->
         require(row.str("source") == "wallstreetcn/macro-calendar/v1" && row["published_at"] == JsonNull) { "经济日历来源不一致" }
         val stamp = row.str("occurs_at").also { Instant.parse(it) }
         fun value(key: String) = row.str(key + "_raw").ifBlank { null }

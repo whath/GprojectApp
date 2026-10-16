@@ -61,7 +61,7 @@ class RevisedLiveScreenTest {
             runOnIdle { assertTrue(model.ui.value.errors.isEmpty(),model.ui.value.errors.toString()) }
             save("revision-live-phone-market")
             onNodeWithText("宏观").performClick();onNodeWithText("黄金美元参考价").assertExists();save("revision-live-phone-macro")
-            runOnIdle { model.open(model.ui.value.rankings.getValue("stock").items.first()) }
+            runOnIdle { model.open(DailyAsset("CN.stock.000001","平安银行","000001",date=model.ui.value.overview.cn)) }
             waitUntil(timeoutMillis=45000) { model.ui.value.detail?.loading==false }
             runOnIdle { assertEquals(30,model.ui.value.detail!!.candles.size);assertTrue(model.ui.value.detail!!.error.isNullOrBlank()) }
             onNodeWithTag("daily-candles").assertExists();save("revision-live-phone-detail")
